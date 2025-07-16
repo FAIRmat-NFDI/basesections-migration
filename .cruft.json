@@ -1,0 +1,27 @@
+{
+  "template": "https://github.com/FAIRmat-NFDI/cookiecutter-nomad-plugin",
+  "commit": "d306850507a46af96b5ab71129582655ce534c86",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "full_name": "Sarthak Kapoor",
+      "email": "sarthak.kapoor@physik.hu-berlin.de",
+      "github_username": "FAIRmat-NFDI",
+      "plugin_name": "basesection-migration",
+      "module_name": "basesection_migration",
+      "short_description": "A plugin meant for migrating NOMAD entries basesections v1 to v2.",
+      "version": "0.1.0",
+      "license": "MIT",
+      "include_schema_package": false,
+      "include_normalizer": false,
+      "include_parser": true,
+      "include_app": false,
+      "include_example_uploads": false,
+      "_copy_without_render": [
+        "*.html"
+      ],
+      "_template": "https://github.com/FAIRmat-NFDI/cookiecutter-nomad-plugin"
+    }
+  },
+  "directory": null
+}
