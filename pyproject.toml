@@ -27,6 +27,7 @@ license = { file = "LICENSE" }
 dependencies = [
     "nomad-lab>=1.3.0",
     "python-magic-bin; sys_platform == 'win32'",
+    "jsonschema",
 ]
 
 [project.urls]
