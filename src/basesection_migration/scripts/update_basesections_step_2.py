@@ -46,7 +46,10 @@ def import_classes_from_basesections_list():
 #         module_name, separator, class_name = m_def.rpartition('.')
 #         if separator:
 #             try:
-#                 m_def_class = getattr(importlib.import_module(module_name), class_name)
+#                 m_def_class = getattr(
+#                     importlib.import_module(module_name),
+#                     class_name
+#                 )
 #                 return m_def_class.mro()
 #             except (AttributeError, ImportError, TypeError, ValueError) as e:
 #                 print(f'Failed to import m_def {m_def}: {e}')
@@ -160,7 +163,8 @@ if __name__ == '__main__':
     base_sections_v1_list_classes = import_classes_from_basesections_list()
 
     # for section in BASE_SECTIONS_V1_LIST:
-    #     rule_path = f'src/basesection_migration/scripts/transformation_rules/rules_{section}.json'
+    #     rule_path = f'src/basesection_migration/scripts/'
+    #  + 'transformation_rules/rules_{section}.json'
     #     rules_json = json.loads(pathlib.Path(rule_path).read_text())
     #     rules = {f'{section}_transformation': Rules(rules_json)}
 
