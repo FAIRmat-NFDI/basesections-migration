@@ -46,7 +46,9 @@ def rename_v1_archives(project_folder: str | pathlib.Path) -> list[pathlib.Path]
     for path in pathlib.Path(project_folder).rglob('*.archive.json'):
         print(f'Checking {path}')
         if not inherits_from_v1_basesection(path):
+            print(f'Skipping {path}')
             continue
+        print(f'Renaming {path}')
         renamed_path = path.with_name(
             f'{path.name.removesuffix(".archive.json")}.archive.v1.json'
         )
