@@ -6,7 +6,6 @@ import pathlib
 from nomad.metainfo.util import metainfo_to_json_schema
 
 # from nomad.datamodel.metainfo.annotations import Rules
-from nomad.utils.json_transformer import Transformer
 
 TEMP_FOLDER = 'tests/data/ExampleELN_BSv1_temp'
 BASE_SECTIONS_V1_LIST = [
@@ -37,28 +36,6 @@ def import_classes_from_basesections_list():
         except ImportError as e:
             print(f'Failed to import {module_name} {section}: {e}')
     return base_sections_v1_list_classes
-
-
-# def find_mro(source_data: dict) -> list | None:
-#     """Find the method resolution order (MRO) of a given archive.data"""
-#     m_def = source_data.get('data', {}).get('m_def', None)
-#     if m_def is not None:
-#         module_name, separator, class_name = m_def.rpartition('.')
-#         if separator:
-#             try:
-#                 m_def_class = getattr(
-#                     importlib.import_module(module_name),
-#                     class_name
-#                 )
-#                 return m_def_class.mro()
-#             except (AttributeError, ImportError, TypeError, ValueError) as e:
-#                 print(f'Failed to import m_def {m_def}: {e}')
-#                 return None
-#     return None
-
-
-def transform_recursively(source_data: dict | list, transformer: Transformer):
-    pass
 
 
 def validate_and_get_subdict_refs(
@@ -158,6 +135,38 @@ def validate_and_get_subdict_refs(
     return subdict_refs
 
 
+def find_mro(section_definition: str) -> list[type] | None:
+    """Find the method resolution order (MRO) of a given m_def"""
+    module_name, separator, class_name = section_definition.rpartition('.')
+    if separator:
+        try:
+            m_def_class = getattr(importlib.import_module(module_name), class_name)
+            return m_def_class.mro()
+        except (AttributeError, ImportError, TypeError, ValueError) as e:
+            print(f'Failed to parse section_definition {section_definition}: {e}')
+            return None
+
+
+def apply_single_transformation(input_section, class_name) -> dict:
+    return {}
+
+
+def transform_section(source_section: dict, section_definition: str) -> dict:
+    section_mro = find_mro(section_definition=section_definition)
+    if not isinstance(section_mro, list):
+        print(f'unexpected mro: {section_mro}')
+        return source_section
+
+    result_section = source_section
+
+    for inherited_class in section_mro:
+        if inherited_class.__name__ in BASE_SECTIONS_V1_LIST:
+            result_section = apply_single_transformation(
+                result_section, inherited_class.__name__
+            )
+    return result_section
+
+
 if __name__ == '__main__':
     # rules_json_paths = [f'rules_{section}.json' for section in BASE_SECTIONS_V1_LIST]
     base_sections_v1_list_classes = import_classes_from_basesections_list()
@@ -178,9 +187,10 @@ if __name__ == '__main__':
         # subsections can also be inheriting from basesections and therefore need
         # to be transformed)
         source_data_full = json.loads(path.read_text())
-        source_data = source_data_full.get('data', {})
+        source_data: dict = source_data_full.get('data', {})
 
-        data_m_def = source_data.get('m_def', None)
+        data_m_def: str | None = source_data.get('m_def', None)
+
         if data_m_def is not None:
             module_name, separator, class_name = data_m_def.rpartition('.')
             if separator:
@@ -204,8 +214,20 @@ if __name__ == '__main__':
             source_data, source_data_schema
         )[::-1]
 
-        for subsection_info in list_of_subsections:
-            print(subsection_info)
+        for subsection_information in list_of_subsections:
+            print(subsection_information)
+            section_path = subsection_information[0]
+            section_definition = subsection_information[1]
+            section = source_data
+            try:
+                for section_path_step in section_path:
+                    section = section[section_path_step]
+            except (AttributeError, TypeError, ValueError) as e:
+                print(f'Failed to reach correct subsection, {e}')
+                continue
+
+            if section_definition is not None and isinstance(section, dict):
+                result_data = transform_section(section, section_definition)
 
         # print(json.dumps(source_data, indent=2))
         # print('###############')
