@@ -147,19 +147,6 @@ def find_mro(section_definition: str) -> list[type] | None:
             return None
 
 
-def apply_single_transformation(
-    input_section: dict, target_section: dict, class_name: str, transformer: Transformer
-) -> dict:
-    return transformer.transform(
-        source_data=input_section,
-        mapping_name=f'{class_name.rsplit(".", maxsplit=1)[-1]}_transformation',
-        target_data=target_section,
-        inplace=False,
-        array_rules=True,
-        delete_sources=False,
-    )
-
-
 def transform_section(
     source_section: dict, section_definition: str, transformer: Transformer
 ) -> dict:
@@ -179,8 +166,14 @@ def transform_section(
                 + f' transformation to section {section_definition}'
             )
             # print(f'&&&&&& before = {json.dumps(source_section, indent=2)}')
-            result_section = apply_single_transformation(
-                source_section, result_section, inherited_class.__name__, transformer
+            result_section = transformer.transform(
+                source_data=source_section,
+                mapping_name=f'{inherited_class.__name__.rsplit(".", maxsplit=1)[-1]}'
+                + '_transformation',
+                target_data=result_section,
+                inplace=False,
+                array_rules=True,
+                delete_sources=False,
             )
             flag_no_transformation = False
             # print(f'&&&&&& after = {json.dumps(result_section, indent=2)}')
@@ -260,7 +253,7 @@ if __name__ == '__main__':
                 new_section = transform_section(
                     old_section, section_definition, transformer
                 )
-                print(f'&&& {new_section}')
+                # print(f'&&& {new_section}')
                 if isinstance(parent_section, dict):
                     parent_section.update({previous_key: new_section})
                 elif isinstance(parent_section, list) and isinstance(previous_key, int):
