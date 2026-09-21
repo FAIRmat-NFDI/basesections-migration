@@ -3,7 +3,7 @@ import json
 import pathlib
 from pathlib import Path
 
-TEMP_FOLDER = 'tests/data/ExampleELN_BSv1'
+TEMP_FOLDER = 'tests/data/ExampleELN_BSv1_temp'
 
 
 def main() -> None:
