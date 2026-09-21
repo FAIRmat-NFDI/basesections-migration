@@ -273,36 +273,3 @@ if __name__ == '__main__':
         )
         with open(output_path, 'w') as f:
             json.dump(source_data_full, f)
-
-        # print(json.dumps(source_data, indent=2))
-        # print('###############')
-        # print('###############')
-        # print('###############')
-        # print(json.dumps(source_data_schema, indent=2))
-
-        # m_contents
-
-        # mro_of_source_data = find_mro(source_data)
-
-        # if mro_of_source_data is None:
-        #     print(f'Failed to find MRO for {path}')
-        #     continue
-
-        # for inherited_class in reversed(mro_of_source_data):
-        #     if inherited_class in base_sections_v1_list_classes:
-        #         pass
-
-        # transform_recursively(source_data, transformer)
-
-        # try:
-        #     transformed_json = transformer.transform(
-        #         source_data, f'{section}_transformation'
-        #     )
-        # except Exception as e:
-        #     print(f'Error transforming {path}: {e}')
-        #     continue
-
-        # transformed_path = path.with_name(
-        #     f'{path.name.removesuffix(".archive.v1.json")}.archive.v2.json'
-        # )
-        # transformed_path.write_text(json.dumps(transformed_json))
