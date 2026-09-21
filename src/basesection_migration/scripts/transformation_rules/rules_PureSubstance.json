@@ -1,3 +1,32 @@
 {
-    "rules": {}
+    "rules": {
+        "move_iupac_name": {
+            "source": "pure_substance.iupac_name",
+            "target": "iupac_name"
+        },
+        "move_molar_mass": {
+            "source": "pure_substance.molar_mass",
+            "target": "molar_mass"
+        },
+        "move_inchi": {
+            "source": "pure_substance.inchi",
+            "target": "inchi"
+        },
+        "move_inchi_key": {
+            "source": "pure_substance.inchi_key",
+            "target": "inchi_key"
+        },
+        "move_smiles": {
+            "source": "pure_substance.smile",
+            "target": "smiles"
+        },
+        "move_canonical_smiles": {
+            "source": "pure_substance.canonical_smile",
+            "target": "canonical_smiles"
+        },
+        "move_cas_number": {
+            "source": "pure_substance.cas_number",
+            "target": "cas_number"
+        }
+    }
 }

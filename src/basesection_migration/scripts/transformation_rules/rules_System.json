@@ -1,3 +1,25 @@
 {
-    "rules": {}
+    "rules": {
+        "replace_el_comp_with_subsystems": {
+            "source": "elemental_composition[n1].element",
+            "target": "sub_systems[n1].name"
+        },
+        "add_element_m_def": {
+            "source": "elemental_composition[n1].paththatdoesnotexist",
+            "target": "sub_systems[n1].nested_system.m_def",
+            "default_value": "nomad.datamodel.metainfo.basesections.v2.Element"
+        },
+        "fill_nested_subsystem_name": {
+            "source": "elemental_composition[n1].element",
+            "target": "sub_systems[n1].nested_system.chemical_symbol"
+        },
+        "move_atomic_fraction": {
+            "source": "elemental_composition[n1].atomic_fraction",
+            "target": "sub_systems[n1].subsystem_properties.atomic_fraction"
+        },
+        "move_mass_fraction": {
+            "source": "elemental_composition[n1].mass_fraction",
+            "target": "sub_systems[n1].subsystem_properties.mass_fraction"
+        }
+    }
 }
