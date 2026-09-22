@@ -25,29 +25,85 @@ BASE_SECTIONS_V1_LIST = [
 # corresponding rules are in f'rules_{BASE_SECTIONS_V1_LIST[i]}.json'
 
 
-def import_classes_from_basesections_list():
-    base_sections_v1_list_classes = []
+def create_transformer() -> Transformer:
+    """Create a transformer configured with all base-section migration rules.
+
+    Returns:
+        A NOMAD ``Transformer`` containing one mapping per section in
+        ``BASE_SECTIONS_V1_LIST``. Expected relative file path for each section is
+        ``transformation_rules/rules_<Section Name>.json``
+    """
+    rules = {}
     for section in BASE_SECTIONS_V1_LIST:
-        module_name = 'nomad.datamodel.metainfo.basesections.v1'
+        rule_path = (
+            'src/basesection_migration/scripts/'
+            + f'transformation_rules/rules_{section}.json'
+        )
+        rules_json = json.loads(pathlib.Path(rule_path).read_text())
+        rules[f'{section}_transformation'] = Rules(**rules_json)
+
+    transformer = Transformer(rules)
+    return transformer
+
+
+def get_schema_from_source_data(source_data: dict) -> tuple[str | None, dict]:
+    """Load the class and JSON schema identified by ``m_def`` key of a source data
+    dictionary.
+
+    Args:
+        source_data: ``data`` section of a NOMAD ``.archive.json`` file.
+
+    Returns:
+        A tuple containing the ``m_def`` value and its loaded JSON schema.
+        If ``m_def`` is missing or cannot be imported, the schema is empty.
+    """
+    data_m_def: str | None = source_data.get('m_def', None)
+
+    if data_m_def is None:
+        print(f'missing m_def for {path}')
+        return None, {}
+
+    module_name, separator, class_name = data_m_def.rpartition('.')
+    if separator:
         try:
-            base_sections_v1_list_classes.append(
-                getattr(importlib.import_module(module_name), section)
-            )
-        except ImportError as e:
-            print(f'Failed to import {module_name} {section}: {e}')
-    return base_sections_v1_list_classes
+            data_m_def_class = getattr(importlib.import_module(module_name), class_name)
+        except (AttributeError, ImportError, TypeError, ValueError) as e:
+            data_m_def_class = None
+            print(f'Failed to import m_def {data_m_def}: {e}')
+
+    if data_m_def_class is not None:
+        source_data_schema = metainfo_to_json_schema(
+            m_def=data_m_def_class.m_def,
+            add_unit_value=False,
+            add_section_subtypes=True,
+            add_property_subtypes=True,
+        )
+
+    return data_m_def, source_data_schema
 
 
-def validate_and_get_subdict_refs(
+def validate_and_get_subdict_refs(  # noqa: PLR0915
     source_data: dict, source_data_schema: dict
 ) -> list[tuple[tuple[str | int, ...], str | None]]:
-    """Validate data and return paths to nested dictionaries and their refs.
+    """Validate ``source_data`` by ``source_data_schema``, then walk both
+    and generate paths to nested subsections and their ``m_def``.
 
-    Paths are tuples of dictionary keys and list indices, relative to
-    ``source_data``. The second item in each pair is the final part of the
-    schema ``$ref`` (after the last ``/`` and before ``@``), or ``None`` when
-    there is no ref. ``jsonschema.ValidationError`` is raised before walking
-    if the data does not conform to the schema.
+    If multiple different ``m_def`` are allowed per a nested subsection by schema,
+    check if ``m_def`` is provided by data and is allowed by schema. Use the data
+    ``m_def`` if the check is passed, otherwise fall back to the last ``m_def``
+    allowed by schema (should be the most general one).
+
+    Args:
+        source_data: ``data`` section of a NOMAD ``.archive.json`` file.
+        source_data_schema: JSON schema corresponding to the ``source_data``.
+
+    Returns:
+        a list of records, every record corresponds to a subsection of the
+        ``source_data`` walked depth-first. Every record is a tuple, where the first
+        element is a path to subsection and the second is an ``m_def`` string
+        corresponding to the subsection. The path is a tuple with elements that are
+        either strings (key for the dict) or integers (indices for the lists) in order
+        from root to subsection.
     """
 
     from jsonschema.validators import validator_for
@@ -65,6 +121,7 @@ def validate_and_get_subdict_refs(
     subdict_refs: list[tuple[tuple[str | int, ...], str | None]] = []
 
     def schema_views(schema: dict):
+        """Yield a schema and the schemas reachable through refs/compositions."""
         if '$ref' in schema:
             resolved_schema = resolver.lookup(schema['$ref']).contents
             yield from schema_views(resolved_schema)
@@ -75,9 +132,11 @@ def validate_and_get_subdict_refs(
                 yield from schema_views(subschema)
 
     def normalize_ref(reference: str) -> str:
+        """Reduce a schema reference to its definition name."""
         return reference.split('@', 1)[0].rsplit('/', 1)[-1]
 
     def schema_refs(schema: dict) -> list[str]:
+        """Collect normalized references from a schema composition."""
         if '$ref' in schema:
             return [normalize_ref(schema['$ref'])]
         references = []
@@ -87,6 +146,7 @@ def validate_and_get_subdict_refs(
         return references
 
     def schema_ref(schema: dict, data: dict | None = None) -> str | None:
+        """Choose the data-matching reference or the final available option."""
         references = schema_refs(schema)
         if not references:
             return None
@@ -97,12 +157,14 @@ def validate_and_get_subdict_refs(
         return references[-1]
 
     def object_properties(schema: dict) -> dict:
+        """Collect object properties from all visible schema views."""
         properties = {}
         for schema_view in schema_views(schema):
             properties.update(schema_view.get('properties', {}))
         return properties
 
     def array_items(schema: dict) -> dict | None:
+        """Return the schema describing items in an array, if present."""
         for schema_view in schema_views(schema):
             items = schema_view.get('items')
             if isinstance(items, dict):
@@ -110,6 +172,7 @@ def validate_and_get_subdict_refs(
         return None
 
     def walk(data: dict | list, schema: dict, path: tuple[str | int, ...]) -> None:
+        """Recursively collect paths to nested dictionaries in source data."""
         if isinstance(data, dict):
             properties = object_properties(schema)
             for key, value in data.items():
@@ -136,7 +199,15 @@ def validate_and_get_subdict_refs(
 
 
 def find_mro(section_definition: str) -> list[type] | None:
-    """Find the method resolution order (MRO) of a given m_def"""
+    """Find the class MRO for a section definition (``m_def``).
+
+    Args:
+        section_definition: Fully qualified Python class name from ``m_def``.
+
+    Returns:
+        The class's method resolution order, or ``None`` if the class cannot
+        be imported or resolved.
+    """
     module_name, separator, class_name = section_definition.rpartition('.')
     if separator:
         try:
@@ -150,6 +221,18 @@ def find_mro(section_definition: str) -> list[type] | None:
 def transform_section(
     source_section: dict, section_definition: str, transformer: Transformer
 ) -> dict:
+    """Apply all relevant base-section transformations to one archive section in
+    reverse-MRO order (first general, then specialized).
+
+    Args:
+        source_section: The section data to transform.
+        section_definition: Fully qualified Python class name from ``m_def``.
+        transformer: Configured NOMAD transformer containing migration rules.
+
+    Returns:
+        The transformed section, or the original section when no applicable
+        base-section transformation exists. The original section remains unchanged.
+    """
     print(f'### transforming section {section_definition}')
     section_mro = find_mro(section_definition=section_definition)
     if not isinstance(section_mro, list):
@@ -165,7 +248,6 @@ def transform_section(
                 f'###### applying {inherited_class.__name__}'
                 + f' transformation to section {section_definition}'
             )
-            # print(f'&&&&&& before = {json.dumps(source_section, indent=2)}')
             result_section = transformer.transform(
                 source_data=source_section,
                 mapping_name=f'{inherited_class.__name__.rsplit(".", maxsplit=1)[-1]}'
@@ -176,7 +258,6 @@ def transform_section(
                 delete_sources=False,
             )
             flag_no_transformation = False
-            # print(f'&&&&&& after = {json.dumps(result_section, indent=2)}')
 
     if flag_no_transformation:
         result_section = source_section
@@ -185,48 +266,17 @@ def transform_section(
 
 
 if __name__ == '__main__':
-    base_sections_v1_list_classes = import_classes_from_basesections_list()
-
-    rules = {}
-    for section in BASE_SECTIONS_V1_LIST:
-        rule_path = (
-            'src/basesection_migration/scripts/'
-            + f'transformation_rules/rules_{section}.json'
-        )
-        rules_json = json.loads(pathlib.Path(rule_path).read_text())
-        rules[f'{section}_transformation'] = Rules(**rules_json)
-
-    # print(f'### rules = {rules}')
-    transformer = Transformer(rules)
+    transformer = create_transformer()
 
     for path in pathlib.Path(TEMP_FOLDER).rglob('*ELNSubstance.archive.v1.json'):
         print(f'Transforming {path}')
         source_data_full = json.loads(path.read_text())
         source_data: dict = source_data_full.get('data', {})
 
-        data_m_def: str | None = source_data.get('m_def', None)
+        data_m_def, source_data_schema = get_schema_from_source_data(source_data)
 
         if data_m_def is None:
-            print(f'missing m_def for {path}')
             continue
-
-        module_name, separator, class_name = data_m_def.rpartition('.')
-        if separator:
-            try:
-                data_m_def_class = getattr(
-                    importlib.import_module(module_name), class_name
-                )
-            except (AttributeError, ImportError, TypeError, ValueError) as e:
-                data_m_def_class = None
-                print(f'Failed to import m_def {data_m_def}: {e}')
-
-        if data_m_def_class is not None:
-            source_data_schema = metainfo_to_json_schema(
-                m_def=data_m_def_class.m_def,
-                add_unit_value=False,
-                add_section_subtypes=True,
-                add_property_subtypes=True,
-            )
 
         list_of_subsections = validate_and_get_subdict_refs(
             source_data, source_data_schema
@@ -246,14 +296,15 @@ if __name__ == '__main__':
                     parent_section = parent_section[previous_key]
                     previous_key = section_path_step
             except (AttributeError, TypeError, ValueError) as e:
-                print(f'Failed to reach correct subsection, {e}')
+                print(
+                    f'Failed to reach correct subsection for path = {section_path}, {e}'
+                )
                 continue
 
             if section_definition is not None and isinstance(old_section, dict):
                 new_section = transform_section(
                     old_section, section_definition, transformer
                 )
-                # print(f'&&& {new_section}')
                 if isinstance(parent_section, dict):
                     parent_section.update({previous_key: new_section})
                 elif isinstance(parent_section, list) and isinstance(previous_key, int):
