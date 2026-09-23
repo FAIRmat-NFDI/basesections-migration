@@ -5,7 +5,6 @@
             "target": "sub_systems[n1].name"
         },
         "add_element_m_def": {
-            "source": "elemental_composition[n1].paththatdoesnotexist",
             "target": "sub_systems[n1].nested_system.m_def",
             "default_value": "nomad.datamodel.metainfo.basesections.v2.Element"
         },
