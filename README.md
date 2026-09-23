@@ -2,6 +2,23 @@
 
 A plugin meant for migrating NOMAD entries basesections v1 to v2.
 
+Currently a set of stand-alone scripts for the migration.
+
+- `update_basesections_step_1.py` renames relevant entries into `*.archive.v1.json`so that they are not recognized by archive parser anymore.
+- `update_basesections_step_2.py` does the actual transformation:
+   - find m_def from the data,
+   - then schema from m_def,
+   - validates data by schema,
+   - finds all subsections with their m_defs by walking the tree of data depth-first,
+   - for each subsection starting from the deep-most, finds MRO for class corresponding to m_def,
+   - run Transformation.transform() using corresponding rules, first for the more general classes, last for the most specific (so, for example, BaseSection -> Entity -> System -> PureSubstance),
+   - save the results as `*.archive.v2.json`.
+- `update_basesections_step_3.py` renames `*.archive.v2.json` into `*.archive.json`
+
+`update_basesections_step_1.py` and `update_basesections_step_2.py` should be run with nomad-lab with ***old (v1)*** BaseSection definitions, so before the actual update of `nomad-lab` and plugins to BaseSections v2.
+
+On the other hand, results of `update_basesections_step_3.py` would be picked up by the archive parser so it should be used either ***after*** the update of nomad-lab and plugins, or at least the corresponding uploads should not be reprocessed before the update.
+
 This `nomad` plugin was generated with `Cookiecutter` along with `@nomad`'s [`cookiecutter-nomad-plugin`](https://github.com/FAIRmat-NFDI/cookiecutter-nomad-plugin) template.
 
 ## Development
