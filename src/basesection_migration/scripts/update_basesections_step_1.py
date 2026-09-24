@@ -58,5 +58,10 @@ def rename_v1_archives(project_folder: str | pathlib.Path) -> list[pathlib.Path]
 
 
 if __name__ == '__main__':
-    shutil.copytree(PROJECT_FOLDER_INPUT, TEMP_FOLDER, dirs_exist_ok=True)
-    rename_v1_archives(TEMP_FOLDER)
+    path_prefix = pathlib.Path(__file__).parents[3]
+    shutil.copytree(
+        path_prefix / PROJECT_FOLDER_INPUT,
+        path_prefix / TEMP_FOLDER,
+        dirs_exist_ok=True
+    )
+    rename_v1_archives(path_prefix / TEMP_FOLDER)

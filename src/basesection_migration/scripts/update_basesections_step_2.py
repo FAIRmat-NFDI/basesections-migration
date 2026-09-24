@@ -27,7 +27,7 @@ BASE_SECTIONS_V1_LIST = [
 # corresponding rules are in f'rules_{BASE_SECTIONS_V1_LIST[i]}.json'
 
 
-def create_transformer() -> Transformer:
+def create_transformer(path_prefix: pathlib.Path) -> Transformer:
     """Create a transformer configured with all base-section migration rules.
 
     Returns:
@@ -38,17 +38,17 @@ def create_transformer() -> Transformer:
     rules = {}
     for section in BASE_SECTIONS_V1_LIST:
         rule_path = (
-            'src/basesection_migration/scripts/'
-            + f'transformation_rules/rules_{section}.json'
+            path_prefix / 'src/basesection_migration/scripts/'
+            / f'transformation_rules/rules_{section}.json'
         )
-        rules_json = json.loads(pathlib.Path(rule_path).read_text())
+        rules_json = json.loads(rule_path.read_text())
         rules[f'{section}_transformation'] = Rules(**rules_json)
 
     transformer = Transformer(rules)
     return transformer
 
 
-def get_schema_from_source_data(source_data: dict) -> tuple[str | None, dict]:
+def get_schema_from_source_data(source_data: dict) -> tuple[str | None, dict | None]:
     """Load the class and JSON schema identified by ``m_def`` key of a source data
     dictionary.
 
@@ -80,6 +80,9 @@ def get_schema_from_source_data(source_data: dict) -> tuple[str | None, dict]:
             add_section_subtypes=True,
             add_property_subtypes=True,
         )
+    else:
+        source_data_schema = None
+        print('Cannot load the data schema')
 
     return data_m_def, source_data_schema
 
@@ -263,16 +266,17 @@ def transform_section(
 
 
 if __name__ == '__main__':
-    transformer = create_transformer()
+    path_prefix = pathlib.Path(__file__).parents[3]
+    transformer = create_transformer(path_prefix)
 
-    for path in pathlib.Path(TEMP_FOLDER).rglob('*ELNSubstance.archive.v1.json'):
+    for path in (path_prefix / TEMP_FOLDER).rglob('*ELNSubstance.archive.v1.json'):
         print(f'Transforming {path}')
         source_data_full = json.loads(path.read_text())
         source_data: dict = source_data_full.get('data', {})
 
         data_m_def, source_data_schema = get_schema_from_source_data(source_data)
 
-        if data_m_def is None:
+        if data_m_def is None or source_data_schema is None:
             continue
 
         list_of_subsections = validate_and_get_subdict_refs(

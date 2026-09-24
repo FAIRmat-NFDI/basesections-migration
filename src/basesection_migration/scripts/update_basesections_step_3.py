@@ -15,7 +15,8 @@ def rename_v2_archives():
     """
     renamed_paths = []
     unchanged_paths = []
-    for path in pathlib.Path(TEMP_FOLDER).rglob('*.archive.v2.json'):
+    path_prefix = pathlib.Path(__file__).parents[3]
+    for path in (path_prefix / TEMP_FOLDER).rglob('*.archive.v2.json'):
         path_original_entry = path.with_name(
             path.name.replace('.archive.v2.json', '.archive.v1.json')
         )
