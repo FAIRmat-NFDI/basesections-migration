@@ -1,7 +1,9 @@
-### transform renamed entries into the new schema, keep the old version as well
+"""transform renamed entries into the new schema, keep the old version as well"""
+
 import importlib
 import json
 import pathlib
+from copy import deepcopy
 
 from nomad.datamodel.metainfo.annotations import Rules
 from nomad.metainfo.util import metainfo_to_json_schema
@@ -239,8 +241,7 @@ def transform_section(
         print(f'unexpected mro: {section_mro}')
         return source_section
 
-    result_section = {}
-    flag_no_transformation = True
+    result_section = deepcopy(source_section)
 
     for inherited_class in reversed(section_mro):
         if inherited_class.__name__ in BASE_SECTIONS_V1_LIST:
@@ -255,12 +256,8 @@ def transform_section(
                 target_data=result_section,
                 inplace=False,
                 array_rules=True,
-                delete_sources=False,
+                delete_sources=True,
             )
-            flag_no_transformation = False
-
-    if flag_no_transformation:
-        result_section = source_section
 
     return result_section
 
