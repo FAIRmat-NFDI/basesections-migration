@@ -1,28 +1,3 @@
 {
-    "rules": {
-        "keep_m_def": {
-            "source": "m_def",
-            "target": "m_def"
-        },
-        "keep_m_def_id": {
-            "source": "m_def_id",
-            "target": "m_def_id"
-        },
-        "keep_name": {
-            "source": "name",
-            "target": "name"
-        },
-        "keep_datetime": {
-            "source": "datetime",
-            "target": "datetime"
-        },
-        "keep_lab_id": {
-            "source": "lab_id",
-            "target": "lab_id"
-        },
-        "keep_description": {
-            "source": "description",
-            "target": "description"
-        }
-    }
+    "rules": {}
 }

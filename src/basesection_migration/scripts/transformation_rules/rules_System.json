@@ -19,6 +19,10 @@
         "move_mass_fraction": {
             "source": "elemental_composition[n1].mass_fraction",
             "target": "sub_systems[n1].subsystem_properties.mass_fraction"
+        },
+        "delete_elemental_composition": {
+            "source": "elemental_composition",
+            "target": "elemental_composition"
         }
     }
 }

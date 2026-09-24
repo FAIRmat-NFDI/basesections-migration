@@ -27,6 +27,10 @@
         "move_cas_number": {
             "source": "pure_substance.cas_number",
             "target": "cas_number"
+        },
+        "remove_pure_substance": {
+            "source": "pure_substance",
+            "target": "pure_substance"
         }
     }
 }
