@@ -113,7 +113,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [project.entry-points.'nomad.plugin']
-parser_entry_point = "basesection_migration.parsers:parser_entry_point"
+# parser_entry_point = "basesection_migration.parsers:parser_entry_point"
 
 
 
