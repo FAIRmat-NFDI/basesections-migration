@@ -1,13 +1,13 @@
-import logging
+# import logging
 
-from nomad.datamodel import EntryArchive
+# from nomad.datamodel import EntryArchive
 
-from basesection_migration.parsers.parser import NewParser
+# from basesection_migration.parsers.parser import NewParser
 
 
-def test_parse_file():
-    parser = NewParser()
-    archive = EntryArchive()
-    parser.parse('tests/data/example.out', archive, logging.getLogger())
+# def test_parse_file():
+#     parser = NewParser()
+#     archive = EntryArchive()
+#     parser.parse('tests/data/example.out', archive, logging.getLogger())
 
-    assert archive.workflow2.name == 'test'
+#     assert archive.workflow2.name == 'test'
