@@ -56,8 +56,7 @@ def inherits_from_v1_basesection(path: str | pathlib.Path) -> bool:
         text = archive_path.read_text()
         data = (
             yaml.safe_load(text)
-            if archive_path.name.endswith('.archive.yaml')
-            or archive_path.name.endswith('.archive.yml')
+            if archive_path.name.endswith('.yaml') or archive_path.name.endswith('.yml')
             else json.loads(text)
         )
     except (OSError, json.JSONDecodeError, yaml.YAMLError):
