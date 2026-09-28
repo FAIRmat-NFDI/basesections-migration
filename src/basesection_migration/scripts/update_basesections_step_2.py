@@ -293,7 +293,7 @@ if __name__ == '__main__':
             print(f'Transforming {path}')
             text = path.read_text()
             source_data_full = (
-                yaml.safe_load(text)
+                yaml.load(text, Loader=yaml.SafeLoader)
                 if path.name.endswith('.yaml') or path.name.endswith('.yml')
                 else json.loads(text)
             )
