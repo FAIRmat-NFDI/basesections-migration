@@ -1,5 +1,9 @@
 {
     "rules": {
+        "delete_m_def_id":{
+            "source": "m_def_id",
+            "target": "m_def_id"
+        },
         "replace_el_comp_with_subsystems": {
             "source": "elemental_composition[n1].element",
             "target": "sub_systems[n1].name"

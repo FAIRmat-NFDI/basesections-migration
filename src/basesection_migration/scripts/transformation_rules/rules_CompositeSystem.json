@@ -1,3 +1,8 @@
 {
-    "rules": {}
+    "rules": {
+        "delete_m_def_id":{
+            "source": "m_def_id",
+            "target": "m_def_id"
+        }
+    }
 }
