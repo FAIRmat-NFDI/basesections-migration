@@ -35,7 +35,14 @@ def _inherits_from_v1_basesection(value: object) -> bool:
     try:
         m_def = value['data']['m_def']
     except (KeyError, TypeError):
+        print('m_def of the root section is missing!')
         return False
+
+    try:
+        m_def_id = value['data']['m_def_id']
+    except (KeyError, TypeError):
+        print('m_def_id of the root section is missing!')
+        m_def_id = None
 
     if not isinstance(m_def, str):
         return False
@@ -44,7 +51,12 @@ def _inherits_from_v1_basesection(value: object) -> bool:
         return False
     try:
         m_def_class = getattr(importlib.import_module(module_name), class_name)
-        return isinstance(m_def_class, type) and issubclass(m_def_class, BaseSection)
+        m_def_id_from_class = m_def_class.m_def.hash().hexdigest()
+        return (
+            isinstance(m_def_class, type)
+            and issubclass(m_def_class, BaseSection)
+            and (m_def_id == m_def_id_from_class or m_def_id is None)
+        )
     except (AttributeError, ImportError, TypeError, ValueError):
         return False
 
