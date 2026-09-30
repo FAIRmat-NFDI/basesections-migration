@@ -86,10 +86,13 @@ def rename_v1_archives(project_folder: str | pathlib.Path) -> list[pathlib.Path]
             if not inherits_from_v1_basesection(path):
                 print(f'Skipping {path}')
                 continue
-            print(f'Renaming {path}')
             renamed_path = path.with_name(
                 f'{path.name.removesuffix(default_suffix)}{v1_suffix}'
             )
+            if renamed_path.exists():
+                print(f'{renamed_path} already exists; skipping')
+                continue
+            print(f'Renaming {path}')
             path.rename(renamed_path)
             renamed_paths.append(renamed_path)
     return renamed_paths

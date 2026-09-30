@@ -48,10 +48,10 @@ def rename_v2_archives():
             path_original_entry = path.with_name(
                 path.name.replace(v2_suffix, v1_suffix)
             )
-            if path_original_entry.exists():
-                renamed_path = path.with_name(
-                    path.name.replace(v2_suffix, default_suffix)
-                )
+            renamed_path = path.with_name(
+                path.name.replace(v2_suffix, default_suffix)
+            )
+            if path_original_entry.exists() and not renamed_path.exists():
                 path.rename(renamed_path)
                 renamed_paths.append(path)
             else:
@@ -67,3 +67,5 @@ if __name__ == '__main__':
             'Warning: some files has not been renamed '
             + f'due to missing v1 source files: {unchanged_paths}'
         )
+    [print(f'Renamed {path}') for path in renamed_paths]
+    [print(f'Failed to rename {path}') for path in unchanged_paths]
