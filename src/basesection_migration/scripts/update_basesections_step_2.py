@@ -5,6 +5,7 @@ import json
 import pathlib
 from copy import deepcopy
 
+import yaml
 from nomad.datamodel.metainfo.annotations import Rules
 from nomad.metainfo.util import metainfo_to_json_schema
 from nomad.utils.json_transformer import Transformer
@@ -26,6 +27,23 @@ BASE_SECTIONS_V1_LIST = [
 ]
 # corresponding rules are in f'rules_{BASE_SECTIONS_V1_LIST[i]}.json'
 
+SUFFIX_V1 = [
+    '.archive.v1.json',
+    '.archive.v1.yaml',
+    '.archive.v1.yml',
+    '.metainfo.v1.json',
+    '.metainfo.v1.yaml',
+    '.metainfo.v1.yml',
+]
+SUFFIX_V2 = [
+    '.archive.v2.json',
+    '.archive.v2.yaml',
+    '.archive.v2.yml',
+    '.metainfo.v2.json',
+    '.metainfo.v2.yaml',
+    '.metainfo.v2.yml',
+]
+
 
 def create_transformer(path_prefix: pathlib.Path) -> Transformer:
     """Create a transformer configured with all base-section migration rules.
@@ -38,10 +56,15 @@ def create_transformer(path_prefix: pathlib.Path) -> Transformer:
     rules = {}
     for section in BASE_SECTIONS_V1_LIST:
         rule_path = (
-            path_prefix / 'src/basesection_migration/scripts/'
+            path_prefix
+            / 'src/basesection_migration/scripts/'
             / f'transformation_rules/rules_{section}.json'
         )
         rules_json = json.loads(rule_path.read_text())
+        rules_json['rules']['delete_m_def_id'] = {
+            'source': 'm_def_id',
+            'target': 'm_def_id',
+        }
         rules[f'{section}_transformation'] = Rules(**rules_json)
 
     transformer = Transformer(rules)
@@ -269,52 +292,62 @@ if __name__ == '__main__':
     path_prefix = pathlib.Path(__file__).parents[3]
     transformer = create_transformer(path_prefix)
 
-    for path in (path_prefix / TEMP_FOLDER).rglob('*ELNSubstance.archive.v1.json'):
-        print(f'Transforming {path}')
-        source_data_full = json.loads(path.read_text())
-        source_data: dict = source_data_full.get('data', {})
+    for v1_suffix, v2_suffix in zip(SUFFIX_V1, SUFFIX_V2):
+        for path in (path_prefix / TEMP_FOLDER).rglob(f'*ELNSubstance{v1_suffix}'):
+            print(f'Transforming {path}')
+            text = path.read_text()
+            source_data_full = (
+                yaml.load(text, Loader=yaml.SafeLoader)
+                if path.name.endswith('.yaml') or path.name.endswith('.yml')
+                else json.loads(text)
+            )
+            source_data: dict = source_data_full.get('data', {})
 
-        data_m_def, source_data_schema = get_schema_from_source_data(source_data)
+            data_m_def, source_data_schema = get_schema_from_source_data(source_data)
 
-        if data_m_def is None or source_data_schema is None:
-            continue
-
-        list_of_subsections = validate_and_get_subdict_refs(
-            source_data, source_data_schema
-        )[::-1]
-        list_of_subsections.append(((), data_m_def))
-
-        for subsection_information in list_of_subsections:
-            print(subsection_information)
-            section_path = subsection_information[0]
-            section_definition = subsection_information[1]
-            old_section = source_data
-            parent_section = source_data_full
-            previous_key = 'data'
-            try:
-                for section_path_step in section_path:
-                    old_section = old_section[section_path_step]
-                    parent_section = parent_section[previous_key]
-                    previous_key = section_path_step
-            except (AttributeError, TypeError, ValueError) as e:
-                print(
-                    f'Failed to reach correct subsection for path = {section_path}, {e}'
-                )
+            if data_m_def is None or source_data_schema is None:
                 continue
 
-            if section_definition is not None and isinstance(old_section, dict):
-                new_section = transform_section(
-                    old_section, section_definition, transformer
-                )
-                if isinstance(parent_section, dict):
-                    parent_section.update({previous_key: new_section})
-                elif isinstance(parent_section, list) and isinstance(previous_key, int):
-                    parent_section[previous_key] = new_section
-                else:
-                    raise TypeError
+            list_of_subsections = validate_and_get_subdict_refs(
+                source_data, source_data_schema
+            )[::-1]
+            list_of_subsections.append(((), data_m_def))
 
-        output_path = path.with_name(
-            path.name.replace('.archive.v1.json', '.archive.v2.json')
-        )
-        with open(output_path, 'w') as f:
-            json.dump(source_data_full, f)
+            for subsection_information in list_of_subsections:
+                print(subsection_information)
+                section_path = subsection_information[0]
+                section_definition = subsection_information[1]
+                old_section = source_data
+                parent_section = source_data_full
+                previous_key = 'data'
+                try:
+                    for section_path_step in section_path:
+                        old_section = old_section[section_path_step]
+                        parent_section = parent_section[previous_key]
+                        previous_key = section_path_step
+                except (AttributeError, TypeError, ValueError) as e:
+                    print(
+                        'Failed to reach correct subsection for path = '
+                        + f'{section_path}, {e}'
+                    )
+                    continue
+
+                if section_definition is not None and isinstance(old_section, dict):
+                    new_section = transform_section(
+                        old_section, section_definition, transformer
+                    )
+                    if isinstance(parent_section, dict):
+                        parent_section.update({previous_key: new_section})
+                    elif isinstance(parent_section, list) and isinstance(
+                        previous_key, int
+                    ):
+                        parent_section[previous_key] = new_section
+                    else:
+                        raise TypeError
+
+            output_path = path.with_name(path.name.replace(v1_suffix, v2_suffix))
+            with open(output_path, 'w') as f:
+                if path.name.endswith('.yaml') or path.name.endswith('.yml'):
+                    yaml.safe_dump(source_data_full, f, sort_keys=False)
+                else:
+                    json.dump(source_data_full, f)

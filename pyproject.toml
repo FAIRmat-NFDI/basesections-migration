@@ -28,6 +28,7 @@ dependencies = [
     "nomad-lab @ git+https://gitlab.mpcdf.mpg.de/nomad-lab/nomad-FAIR@develop",
     "python-magic-bin; sys_platform == 'win32'",
     "jsonschema",
+    "pyyaml>=6.0.3",
 ]
 
 [project.urls]
