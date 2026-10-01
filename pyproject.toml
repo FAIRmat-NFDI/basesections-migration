@@ -28,6 +28,9 @@ dependencies = [
     "nomad-lab @ git+https://gitlab.mpcdf.mpg.de/nomad-lab/nomad-FAIR@develop",
     "python-magic-bin; sys_platform == 'win32'",
     "jsonschema",
+    "pydantic",
+    "temporalio",
+    "PyYAML",
 ]
 
 [project.urls]
@@ -112,8 +115,12 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+basesection_migration = ["scripts/transformation_rules/*.json"]
+
 [project.entry-points.'nomad.plugin']
 # parser_entry_point = "basesection_migration.parsers:parser_entry_point"
+migrate_basesections_action = "basesection_migration.actions:migrate_basesections"
 
 
 
