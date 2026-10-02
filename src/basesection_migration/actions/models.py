@@ -13,10 +13,16 @@ class EntryRef(BaseModel):
 class MigrationActionInput(BaseModel):
     user_id: str = Field(description='ID of the administrator starting the action.')
     upload_id: str = Field(description='ID of the administrator-owned report upload.')
+    target_upload_ids: list[str] = Field(
+        default_factory=list,
+        description='IDs of the upload to migrate. If empty, all available staging '
+        'uploads will be migrated.',
+    )
 
 
 class FindEntriesInput(BaseModel):
     user_id: str
+    target_upload_ids: list[str] = Field(default_factory=list)
 
 
 class TransformUploadInput(BaseModel):

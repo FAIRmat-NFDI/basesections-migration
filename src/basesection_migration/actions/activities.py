@@ -33,15 +33,17 @@ def find_v1_entries(data: FindEntriesInput) -> list[EntryRef]:
             'Only the configured NOMAD administrator can run this action.'
         )
 
+    query = {
+        'published': False,
+        'section_defs.definition_qualified_name': BaseSection.m_def.qualified_name(),
+    }
+    if data.target_upload_ids:
+        query['upload_id:any'] = data.target_upload_ids
+
     entries = search_iterator(
         owner='admin',
         user_id=data.user_id,
-        query={
-            'published': False,
-            'section_defs.definition_qualified_name': (
-                BaseSection.m_def.qualified_name()
-            ),
-        },
+        query=query,
         required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),
     )
     mainfile_name_re = re.compile(MAINFILE_NAME_RE)

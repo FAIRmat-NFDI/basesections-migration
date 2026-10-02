@@ -84,7 +84,9 @@ class MigrateBaseSectionsWorkflow:
 
         found = await workflow.execute_activity(
             find_v1_entries,
-            FindEntriesInput(user_id=data.user_id),
+            FindEntriesInput(
+                user_id=data.user_id, target_upload_ids=data.target_upload_ids
+            ),
             start_to_close_timeout=timedelta(hours=2),
             retry_policy=NO_RETRY,
         )
