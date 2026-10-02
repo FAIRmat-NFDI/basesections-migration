@@ -1,10 +1,10 @@
 """NOMAD action entry point for migrating BaseSection v1 archives."""
 
 from nomad.actions import TaskQueue
-from nomad.config import config as nomad_config
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
+    from nomad.config import config as nomad_config
     from nomad.config.models.plugins import ActionEntryPoint
 
 
