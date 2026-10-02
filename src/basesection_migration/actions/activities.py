@@ -2,6 +2,7 @@
 
 import json
 import re
+from pathlib import Path
 
 from nomad.app.v1.models.models import MetadataRequired
 from nomad.config import config
@@ -46,11 +47,21 @@ def find_v1_entries(data: FindEntriesInput) -> list[EntryRef]:
     mainfile_name_re = re.compile(MAINFILE_NAME_RE)
     entry_refs = []
     for entry in entries:
+        upload_id = entry.get('upload_id')
+        mainfile = entry.get('mainfile')
         if (
-            not StagingUploadFiles.exists_for(entry.get('upload_id'))
-            or not entry.get('mainfile')
-            or not mainfile_name_re.fullmatch(entry['mainfile'])
+            not StagingUploadFiles.exists_for(upload_id)
+            or not mainfile
+            or not mainfile_name_re.fullmatch(mainfile)
         ):
+            continue
+
+        # skip if a backup mainfile exists, i.e., the mainfile was already transformed
+        upload_files = StagingUploadFiles.get(upload_id)
+        mainfile_path = Path(mainfile)
+        suffix = mainfile_path.suffix
+        backup_mainfile_path = f'{mainfile_path.name.removesuffix(suffix)}.v1{suffix}'
+        if upload_files.raw_path_exists(backup_mainfile_path):
             continue
 
         entry_refs.append(
