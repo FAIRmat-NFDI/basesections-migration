@@ -44,12 +44,19 @@ def find_v1_entries(data: FindEntriesInput) -> list[EntryRef]:
         required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),
     )
     mainfile_name_re = re.compile(MAINFILE_NAME_RE)
-    return [
-        EntryRef(entry_id=entry['entry_id'], upload_id=entry['upload_id'])
-        for entry in entries
-        if isinstance(entry.get('mainfile'), str)
-        and mainfile_name_re.fullmatch(entry['mainfile'])
-    ]
+    entry_refs = []
+    for entry in entries:
+        if (
+            not StagingUploadFiles.exists_for(entry.get('upload_id'))
+            or not entry.get('mainfile')
+            or not mainfile_name_re.fullmatch(entry['mainfile'])
+        ):
+            continue
+
+        entry_refs.append(
+            EntryRef(entry_id=entry['entry_id'], upload_id=entry['upload_id'])
+        )
+    return entry_refs
 
 
 @activity.defn
@@ -66,31 +73,20 @@ def transform_entry(data: TransformEntryInput) -> TransformEntryResult:  # noqa:
             reason=reason,
         )
 
-    try:
-        entry = Entry.get(data.entry_id)
-        mainfile = entry.mainfile
-        if entry.upload_id != data.target_upload_id:
-            return result('failed', 'Entry belongs to a different upload')
+    entry = Entry.get(data.entry_id)
+    mainfile = entry.mainfile
+    if entry.upload_id != data.target_upload_id:
+        return result('failed', 'Entry belongs to a different upload')
 
-        upload = Upload.get(data.target_upload_id)
-        if upload.published:
-            return result('skipped', 'Upload is published')
-        if not StagingUploadFiles.exists_for(data.target_upload_id):
-            return result('skipped', 'Upload no longer has staging files')
-        if not isinstance(mainfile, str) or not mainfile.endswith(
-            ('archive.json', 'archive.yaml')
-        ):
-            return result('skipped', 'Entry mainfile is not a supported input archive')
+    upload_files = StagingUploadFiles(data.target_upload_id)
+    if not upload_files.raw_isfile(mainfile):
+        return result('failed', 'Entry mainfile is missing')
+    path = upload_files.raw_file_object(mainfile).os_path
 
-        upload_files = StagingUploadFiles(data.target_upload_id)
-        if not upload_files.raw_isfile(mainfile):
-            return result('failed', 'Entry mainfile is missing')
-        path = upload_files.raw_file_object(mainfile).os_path
-        if migrate_input_archive(path):
-            return result('transformed')
-        return result('skipped', 'Archive is ineligible or already has a v1 backup')
-    except Exception as exc:
-        return result('failed', f'{type(exc).__name__}: {exc}')
+    if migrate_input_archive(path):
+        return result('transformed')
+
+    return result('skipped', 'Archive is ineligible or already has a v1 backup')
 
 
 def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:
@@ -104,9 +100,7 @@ def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:
         raise ValueError(f'Report upload {data.upload_id} does not exist.')
     if upload.main_author != data.user_id:
         raise PermissionError('The report upload must be owned by the administrator.')
-    if upload.publish_time is not None or not StagingUploadFiles.exists_for(
-        data.upload_id
-    ):
+    if upload.published or not StagingUploadFiles.exists_for(data.upload_id):
         raise ValueError('The report upload must be an unpublished staging upload.')
     return StagingUploadFiles(data.upload_id)
 
