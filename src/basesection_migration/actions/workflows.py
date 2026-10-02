@@ -4,7 +4,6 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from basesection_migration.actions.activities import (
@@ -39,7 +38,6 @@ class TransformUploadWorkflow:
         transformed_mainfiles: set[str] = set()
 
         for entry_id in dict.fromkeys(data.entry_ids):
-            entry_ref = EntryRef(entry_id=entry_id, upload_id=data.target_upload_id)
             try:
                 result = await workflow.execute_activity(
                     transform_entry,
@@ -52,7 +50,9 @@ class TransformUploadWorkflow:
                 )
             except Exception as exc:
                 result = TransformEntryResult(
-                    entry_ref=entry_ref,
+                    entry_ref=EntryRef(
+                        entry_id=entry_id, upload_id=data.target_upload_id
+                    ),
                     status='failed',
                     reason=str(exc),
                 )
@@ -61,11 +61,6 @@ class TransformUploadWorkflow:
                 output.transformed.append(result.entry_ref)
                 if result.mainfile:
                     transformed_mainfiles.add(result.mainfile)
-            elif (
-                result.status == 'skipped' and result.mainfile in transformed_mainfiles
-            ):
-                # Several indexed entry IDs can refer to one archive mainfile.
-                output.transformed.append(result.entry_ref)
             elif result.status == 'skipped':
                 output.skipped.append(result)
             else:
@@ -87,50 +82,34 @@ class MigrateBaseSectionsWorkflow:
             retry_policy=NO_RETRY,
         )
 
-        found: list[EntryRef] = []
+        found = await workflow.execute_activity(
+            find_v1_entries,
+            FindEntriesInput(user_id=data.user_id),
+            start_to_close_timeout=timedelta(hours=2),
+            retry_policy=NO_RETRY,
+        )
         transformed: list[EntryRef] = []
         skipped: list[TransformEntryResult] = []
         failed: list[TransformEntryResult] = []
-        error: str | None = None
 
-        try:
-            found = await workflow.execute_activity(
-                find_v1_entries,
-                FindEntriesInput(user_id=data.user_id),
-                start_to_close_timeout=timedelta(hours=2),
+        entries_by_upload: dict[str, list[str]] = {}
+        for entry in found:
+            entries_by_upload.setdefault(entry.upload_id, []).append(entry.entry_id)
+
+        for upload_id, entry_ids in entries_by_upload.items():
+            result = await workflow.execute_child_workflow(
+                TransformUploadWorkflow.run,
+                TransformUploadInput(
+                    target_upload_id=upload_id,
+                    entry_ids=entry_ids,
+                ),
+                id=f'{workflow.info().workflow_id}-upload-{upload_id}',
+                parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
                 retry_policy=NO_RETRY,
             )
-
-            entries_by_upload: dict[str, list[str]] = {}
-            for entry in found:
-                entries_by_upload.setdefault(entry.upload_id, []).append(entry.entry_id)
-
-            for upload_id, entry_ids in entries_by_upload.items():
-                try:
-                    result = await workflow.execute_child_workflow(
-                        TransformUploadWorkflow.run,
-                        TransformUploadInput(
-                            target_upload_id=upload_id,
-                            entry_ids=entry_ids,
-                        ),
-                        id=f'{workflow.info().workflow_id}-upload-{upload_id}',
-                        parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
-                        retry_policy=NO_RETRY,
-                    )
-                    transformed.extend(result.transformed)
-                    skipped.extend(result.skipped)
-                    failed.extend(result.failed)
-                except Exception as exc:
-                    failed.extend(
-                        TransformEntryResult(
-                            entry_ref=EntryRef(entry_id=entry_id, upload_id=upload_id),
-                            status='failed',
-                            reason=f'Upload workflow failed: {exc}',
-                        )
-                        for entry_id in dict.fromkeys(entry_ids)
-                    )
-        except Exception as exc:
-            error = f'{type(exc).__name__}: {exc}'
+            transformed.extend(result.transformed)
+            skipped.extend(result.skipped)
+            failed.extend(result.failed)
 
         report_path = await workflow.execute_activity(
             write_report,
@@ -143,14 +122,10 @@ class MigrateBaseSectionsWorkflow:
                 transformed=transformed,
                 skipped=skipped,
                 failed=failed,
-                error=error,
             ),
             start_to_close_timeout=timedelta(hours=2),
             retry_policy=NO_RETRY,
         )
-        if error:
-            raise ApplicationError(error)
-
         return MigrationActionOutput(
             found_count=len(found),
             transformed=transformed,
