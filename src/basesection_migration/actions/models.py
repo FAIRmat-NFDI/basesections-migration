@@ -11,7 +11,7 @@ class EntryRef(BaseModel):
 
 
 class MigrationActionInput(BaseModel):
-    user_id: str = Field(description='ID of the user starting the action.')
+    user_id: str = Field(description='ID of the administrator starting the action.')
     upload_id: str = Field(description='ID of the administrator-owned report upload.')
 
 
@@ -20,13 +20,17 @@ class FindEntriesInput(BaseModel):
 
 
 class TransformUploadInput(BaseModel):
-    target_upload_id: str
-    entry_ids: list[str]
+    target_upload_id: str = Field(
+        description='ID of the upload containing the entries to transform.'
+    )
+    entry_ids: list[str] = Field(description='List of entry IDs to transform.')
 
 
 class TransformEntryInput(BaseModel):
-    target_upload_id: str
-    entry_id: str
+    target_upload_id: str = Field(
+        description='ID of the upload containing the entry to transform.'
+    )
+    entry_id: str = Field(description='ID of the entry to transform.')
 
 
 class TransformEntryResult(BaseModel):
