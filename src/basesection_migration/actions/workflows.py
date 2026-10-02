@@ -1,6 +1,7 @@
 """Temporal workflows for the BaseSection v1 to v2 migration."""
 
 from datetime import timedelta
+from typing import Literal
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -17,6 +18,7 @@ with workflow.unsafe.imports_passed_through():
         FindEntriesInput,
         MigrationActionInput,
         MigrationActionOutput,
+        MigrationEntry,
         ReportInput,
         TransformEntryInput,
         TransformEntryResult,
@@ -35,33 +37,39 @@ class TransformUploadWorkflow:
     @workflow.run
     async def run(self, data: TransformUploadInput) -> TransformUploadResult:
         output = TransformUploadResult()
-        transformed_mainfiles: set[str] = set()
+        outcomes: dict[
+            str, tuple[Literal['transformed', 'skipped', 'failed'], str | None]
+        ] = {}
+        for entry in data.entries:
+            path = entry.mainfile_os_path
+            if path not in outcomes:
+                try:
+                    transformed = await workflow.execute_activity(
+                        transform_entry,
+                        TransformEntryInput(mainfile_os_path=path),
+                        start_to_close_timeout=timedelta(hours=2),
+                        retry_policy=NO_RETRY,
+                    )
+                    if transformed:
+                        outcomes[path] = ('transformed', None)
+                    else:
+                        outcomes[path] = (
+                            'skipped',
+                            'Archive is ineligible or already has a v1 backup',
+                        )
+                except Exception as exc:
+                    outcomes[path] = ('failed', str(exc))
 
-        for entry_id in dict.fromkeys(data.entry_ids):
-            try:
-                result = await workflow.execute_activity(
-                    transform_entry,
-                    TransformEntryInput(
-                        target_upload_id=data.target_upload_id,
-                        entry_id=entry_id,
-                    ),
-                    start_to_close_timeout=timedelta(hours=2),
-                    retry_policy=NO_RETRY,
-                )
-            except Exception as exc:
-                result = TransformEntryResult(
-                    entry_ref=EntryRef(
-                        entry_id=entry_id, upload_id=data.target_upload_id
-                    ),
-                    status='failed',
-                    reason=str(exc),
-                )
-
-            if result.status == 'transformed':
+            status, reason = outcomes[path]
+            result = TransformEntryResult(
+                entry_ref=entry.entry_ref,
+                mainfile=entry.mainfile,
+                status=status,
+                reason=reason,
+            )
+            if status == 'transformed':
                 output.transformed.append(result.entry_ref)
-                if result.mainfile:
-                    transformed_mainfiles.add(result.mainfile)
-            elif result.status == 'skipped':
+            elif status == 'skipped':
                 output.skipped.append(result)
             else:
                 output.failed.append(result)
@@ -82,7 +90,7 @@ class MigrateBaseSectionsWorkflow:
             retry_policy=NO_RETRY,
         )
 
-        found = await workflow.execute_activity(
+        found_migration_entries = await workflow.execute_activity(
             find_v1_entries,
             FindEntriesInput(
                 user_id=data.user_id, target_upload_ids=data.target_upload_ids
@@ -94,16 +102,16 @@ class MigrateBaseSectionsWorkflow:
         skipped: list[TransformEntryResult] = []
         failed: list[TransformEntryResult] = []
 
-        entries_by_upload: dict[str, list[str]] = {}
-        for entry in found:
-            entries_by_upload.setdefault(entry.upload_id, []).append(entry.entry_id)
+        entries_by_upload: dict[str, list[MigrationEntry]] = {}
+        for entry in found_migration_entries:
+            entries_by_upload.setdefault(entry.entry_ref.upload_id, []).append(entry)
 
-        for upload_id, entry_ids in entries_by_upload.items():
+        for upload_id, entries in entries_by_upload.items():
             result = await workflow.execute_child_workflow(
                 TransformUploadWorkflow.run,
                 TransformUploadInput(
                     target_upload_id=upload_id,
-                    entry_ids=entry_ids,
+                    entries=entries,
                 ),
                 id=f'{workflow.info().workflow_id}-upload-{upload_id}',
                 parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
@@ -120,7 +128,7 @@ class MigrateBaseSectionsWorkflow:
                 upload_id=data.upload_id,
                 workflow_id=workflow.info().workflow_id,
                 started_at=workflow.info().start_time.isoformat(),
-                found=found,
+                found=[entry.entry_ref for entry in found_migration_entries],
                 transformed=transformed,
                 skipped=skipped,
                 failed=failed,
@@ -129,7 +137,7 @@ class MigrateBaseSectionsWorkflow:
             retry_policy=NO_RETRY,
         )
         return MigrationActionOutput(
-            found_count=len(found),
+            found_count=len(found_migration_entries),
             transformed=transformed,
             skipped_count=len(skipped),
             failed_count=len(failed),

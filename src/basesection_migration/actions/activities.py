@@ -8,7 +8,7 @@ from nomad.app.v1.models.models import MetadataRequired
 from nomad.config import config
 from nomad.datamodel.metainfo.basesections.v1 import BaseSection
 from nomad.files import StagingUploadFiles
-from nomad.processing.data import Entry, Upload
+from nomad.processing.data import Upload
 from nomad.search import search_iterator
 from temporalio import activity
 
@@ -16,9 +16,9 @@ from basesection_migration.actions.models import (
     EntryRef,
     FindEntriesInput,
     MigrationActionInput,
+    MigrationEntry,
     ReportInput,
     TransformEntryInput,
-    TransformEntryResult,
 )
 from basesection_migration.scripts.migrate import migrate_input_archive
 
@@ -26,7 +26,7 @@ MAINFILE_NAME_RE = r'.*(archive|metainfo)\.(json|yaml|yml)$'
 
 
 @activity.defn
-def find_v1_entries(data: FindEntriesInput) -> list[EntryRef]:
+def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
     """Find staging archive mainfiles whose indexed schema includes v1 BaseSection."""
     if data.user_id != config.services.admin_user_id:
         raise PermissionError(
@@ -47,7 +47,7 @@ def find_v1_entries(data: FindEntriesInput) -> list[EntryRef]:
         required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),
     )
     mainfile_name_re = re.compile(MAINFILE_NAME_RE)
-    entry_refs = []
+    migration_entries = []
     for entry in entries:
         upload_id = entry.get('upload_id')
         mainfile = entry.get('mainfile')
@@ -66,40 +66,22 @@ def find_v1_entries(data: FindEntriesInput) -> list[EntryRef]:
         if upload_files.raw_path_exists(backup_mainfile_path):
             continue
 
-        entry_refs.append(
-            EntryRef(entry_id=entry['entry_id'], upload_id=entry['upload_id'])
+        migration_entries.append(
+            MigrationEntry(
+                entry_ref=EntryRef(
+                    entry_id=entry['entry_id'], upload_id=entry['upload_id']
+                ),
+                mainfile=mainfile,
+                mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
+            )
         )
-    return entry_refs
+    return migration_entries
 
 
 @activity.defn
-def transform_entry(data: TransformEntryInput) -> TransformEntryResult:  # noqa: PLR0911
-    """Transform a staged entry's mainfile, returning its outcome for the report."""
-    entry_ref = EntryRef(entry_id=data.entry_id, upload_id=data.target_upload_id)
-    mainfile = None
-
-    def result(status: str, reason: str | None = None) -> TransformEntryResult:
-        return TransformEntryResult(
-            entry_ref=entry_ref,
-            mainfile=mainfile,
-            status=status,
-            reason=reason,
-        )
-
-    entry = Entry.get(data.entry_id)
-    mainfile = entry.mainfile
-    if entry.upload_id != data.target_upload_id:
-        return result('failed', 'Entry belongs to a different upload')
-
-    upload_files = StagingUploadFiles(data.target_upload_id)
-    if not upload_files.raw_isfile(mainfile):
-        return result('failed', 'Entry mainfile is missing')
-    path = upload_files.raw_file_object(mainfile).os_path
-
-    if migrate_input_archive(path):
-        return result('transformed')
-
-    return result('skipped', 'Archive is ineligible or already has a v1 backup')
+def transform_entry(data: TransformEntryInput) -> bool:
+    """Transform a resolved mainfile, returning whether it was migrated."""
+    return migrate_input_archive(data.mainfile_os_path)
 
 
 def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:

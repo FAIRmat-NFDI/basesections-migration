@@ -10,6 +10,12 @@ class EntryRef(BaseModel):
     upload_id: str
 
 
+class MigrationEntry(BaseModel):
+    entry_ref: EntryRef
+    mainfile: str
+    mainfile_os_path: str
+
+
 class MigrationActionInput(BaseModel):
     user_id: str = Field(description='ID of the administrator starting the action.')
     upload_id: str = Field(description='ID of the administrator-owned report upload.')
@@ -29,14 +35,15 @@ class TransformUploadInput(BaseModel):
     target_upload_id: str = Field(
         description='ID of the upload containing the entries to transform.'
     )
-    entry_ids: list[str] = Field(description='List of entry IDs to transform.')
+    entries: list[MigrationEntry] = Field(
+        description='Entries and resolved mainfile paths to transform.'
+    )
 
 
 class TransformEntryInput(BaseModel):
-    target_upload_id: str = Field(
-        description='ID of the upload containing the entry to transform.'
+    mainfile_os_path: str = Field(
+        description='Path to the mainfile on the local filesystem.'
     )
-    entry_id: str = Field(description='ID of the entry to transform.')
 
 
 class TransformEntryResult(BaseModel):
