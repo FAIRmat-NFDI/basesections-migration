@@ -292,6 +292,7 @@ dependencies = [
     { name = "jsonschema" },
     { name = "nomad-lab" },
     { name = "python-magic-bin", marker = "sys_platform == 'win32'" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -307,6 +308,7 @@ requires-dist = [
     { name = "nomad-lab", git = "https://gitlab.mpcdf.mpg.de/nomad-lab/nomad-FAIR?rev=develop" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "python-magic-bin", marker = "sys_platform == 'win32'" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "structlog", marker = "extra == 'dev'" },
 ]

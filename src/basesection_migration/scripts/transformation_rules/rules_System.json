@@ -12,17 +12,13 @@
             "source": "elemental_composition[n1].element",
             "target": "sub_systems[n1].nested_system.chemical_symbol"
         },
-        "move_atomic_fraction": {
-            "source": "elemental_composition[n1].atomic_fraction",
-            "target": "sub_systems[n1].subsystem_properties.atomic_fraction"
-        },
-        "move_mass_fraction": {
-            "source": "elemental_composition[n1].mass_fraction",
-            "target": "sub_systems[n1].subsystem_properties.mass_fraction"
+        "move_elemental_composition": {
+            "source": "elemental_composition[n1]",
+            "target": "sub_systems[n1].subsystem_properties"
         },
         "delete_elemental_composition": {
-            "source": "elemental_composition",
-            "target": "elemental_composition"
+            "target": "elemental_composition",
+            "action": "delete"
         }
     }
 }
