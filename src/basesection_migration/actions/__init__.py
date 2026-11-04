@@ -15,7 +15,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
         from basesection_migration.actions.activities import (
             find_v1_entries,
             transform_entry,
-            validate_report_upload,
+            validate_input,
             write_report,
         )
         from basesection_migration.actions.workflows import (
@@ -28,7 +28,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
             workflow=MigrateBaseSectionsWorkflow,
             child_workflows=[TransformUploadWorkflow],
             activities=[
-                validate_report_upload,
+                validate_input,
                 find_v1_entries,
                 transform_entry,
                 write_report,

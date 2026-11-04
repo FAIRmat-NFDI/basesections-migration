@@ -4,11 +4,9 @@ import json
 import re
 from pathlib import Path
 
+from elasticsearch.dsl import Q
 from nomad.app.v1.models.models import MetadataRequired
 from nomad.config import config
-from nomad.datamodel.metainfo.basesections.v1 import BaseSection
-from nomad.files import StagingUploadFiles
-from nomad.processing.data import Upload
 from nomad.search import search_iterator
 from temporalio import activity
 
@@ -20,57 +18,82 @@ from basesection_migration.actions.models import (
     ReportInput,
     TransformEntryInput,
 )
+from basesection_migration.actions.utils import get_staging_upload_files
 from basesection_migration.scripts.migrate import migrate_input_archive
 
-MAINFILE_NAME_RE = r'.*(archive|metainfo)\.(json|yaml|yml)$'
+MAINFILE_NAME_RE = r'.*(archive|metainfo)\.(json|yaml|yml)'
+
+## Optional regex that matches with all nomad.datamodel.metainfo.basesections.v1
+## sections, even if they are not inheriting BaseSection:
+# V1_SECTION_NAME_RE = r'nomad\.datamodel\.metainfo\.basesections\.v1\..+'
+
+V1_SECTION_NAME_RE = r'nomad\.datamodel\.metainfo\.basesections\.v1\.BaseSection'
 
 
 @activity.defn
-def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
-    """Find staging archive mainfiles whose indexed schema includes v1 BaseSection."""
+def validate_input(data: MigrationActionInput) -> None:
+    """
+    Before the migration workflow starts, fail if
+
+    - user is not admin
+    - upload_id does not resolve to a staging upload for saving the report
+    - target_upload_ids does not resolve to staging uploads
+    """
     if data.user_id != config.services.admin_user_id:
         raise PermissionError(
             'Only the configured NOMAD administrator can run this action.'
         )
 
-    query = {
-        'published': False,
-        'section_defs.definition_qualified_name': BaseSection.m_def.qualified_name(),
-    }
+    for upload_id in [data.upload_id, *data.target_upload_ids]:
+        get_staging_upload_files(upload_id)
+
+
+@activity.defn
+def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
+    """Find staging ELN entries that contain or inherit v1 BaseSection."""
+    query = Q(
+        'bool',
+        filter=[
+            Q('term', published=False),
+            Q(
+                'nested',
+                path='section_defs',
+                query=Q(
+                    'regexp',
+                    **{'section_defs.definition_qualified_name': V1_SECTION_NAME_RE},
+                ),
+            ),
+            Q('regexp', **{'mainfile.keyword': MAINFILE_NAME_RE}),
+        ],
+    )
     if data.target_upload_ids:
-        query['upload_id:any'] = data.target_upload_ids
+        query &= Q('terms', upload_id=data.target_upload_ids)
 
     entries = search_iterator(
         owner='admin',
         user_id=data.user_id,
         query=query,
-        required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),
+        required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),  # type: ignore
     )
-    mainfile_name_re = re.compile(MAINFILE_NAME_RE)
     migration_entries = []
     for entry in entries:
-        upload_id = entry.get('upload_id')
-        mainfile = entry.get('mainfile')
-        if (
-            not StagingUploadFiles.exists_for(upload_id)
-            or not mainfile
-            or not mainfile_name_re.fullmatch(mainfile)
-        ):
-            continue
+        entry_id = entry['entry_id']
+        upload_id = entry['upload_id']
+        mainfile = entry['mainfile']
 
         # skip if a backup mainfile exists, i.e., the mainfile was already transformed
-        upload_files = StagingUploadFiles.get(upload_id)
+        upload_files = get_staging_upload_files(upload_id)
         mainfile_path = Path(mainfile)
         suffix = mainfile_path.suffix
-        backup_mainfile_path = f'{mainfile_path.name.removesuffix(suffix)}.v1{suffix}'
+        backup_mainfile_path = mainfile_path.with_name(
+            f'{mainfile_path.stem}.v1{suffix}'
+        ).as_posix()
         if upload_files.raw_path_exists(backup_mainfile_path):
             continue
 
         migration_entries.append(
             MigrationEntry(
-                entry_ref=EntryRef(
-                    entry_id=entry['entry_id'], upload_id=entry['upload_id']
-                ),
+                entry_ref=EntryRef(entry_id=entry_id, upload_id=upload_id),
                 mainfile=mainfile,
                 mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
             )
@@ -84,34 +107,10 @@ def transform_entry(data: TransformEntryInput) -> bool:
     return migrate_input_archive(data.mainfile_os_path)
 
 
-def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:
-    if data.user_id != config.services.admin_user_id:
-        raise PermissionError(
-            'Only the configured NOMAD administrator can migrate entries.'
-        )
-
-    upload = Upload.get(data.upload_id)
-    if upload is None:
-        raise ValueError(f'Report upload {data.upload_id} does not exist.')
-    if upload.main_author != data.user_id:
-        raise PermissionError('The report upload must be owned by the administrator.')
-    if upload.published or not StagingUploadFiles.exists_for(data.upload_id):
-        raise ValueError('The report upload must be an unpublished staging upload.')
-    return StagingUploadFiles(data.upload_id)
-
-
-@activity.defn
-def validate_report_upload(data: MigrationActionInput) -> None:
-    """Fail before migration starts if the report cannot be saved."""
-    _report_upload(data)
-
-
 @activity.defn
 def write_report(data: ReportInput) -> str:
     """Write a durable JSON report into the administrator's staging upload."""
-    upload_files = _report_upload(
-        MigrationActionInput(user_id=data.user_id, upload_id=data.upload_id)
-    )
+    upload_files = get_staging_upload_files(data.upload_id)
     safe_workflow_id = re.sub(r'[^A-Za-z0-9._-]', '_', data.workflow_id)
     report_path = f'basesection_migration_{safe_workflow_id}.json'
     report = {

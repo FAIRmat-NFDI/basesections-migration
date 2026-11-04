@@ -10,7 +10,7 @@ with workflow.unsafe.imports_passed_through():
     from basesection_migration.actions.activities import (
         find_v1_entries,
         transform_entry,
-        validate_report_upload,
+        validate_input,
         write_report,
     )
     from basesection_migration.actions.models import (
@@ -84,7 +84,7 @@ class MigrateBaseSectionsWorkflow:
     @workflow.run
     async def run(self, data: MigrationActionInput) -> MigrationActionOutput:
         await workflow.execute_activity(
-            validate_report_upload,
+            validate_input,
             data,
             start_to_close_timeout=timedelta(minutes=5),
             retry_policy=NO_RETRY,
