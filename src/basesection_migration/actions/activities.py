@@ -4,11 +4,9 @@ import json
 import re
 from pathlib import Path
 
+from elasticsearch.dsl import Q
 from nomad.app.v1.models.models import MetadataRequired
 from nomad.config import config
-from nomad.datamodel.metainfo.basesections.v1 import BaseSection as BaseSectionV1
-from nomad.files import StagingUploadFiles
-from nomad.processing.data import Upload
 from nomad.search import search_iterator
 from temporalio import activity
 
@@ -23,7 +21,13 @@ from basesection_migration.actions.models import (
 from basesection_migration.actions.utils import get_staging_upload_files
 from basesection_migration.scripts.migrate import migrate_input_archive
 
-MAINFILE_NAME_RE = r'.*(archive|metainfo)\.(json|yaml|yml)$'
+MAINFILE_NAME_RE = r'.*(archive|metainfo)\.(json|yaml|yml)'
+
+## Optional regex that matches with all nomad.datamodel.metainfo.basesections.v1
+## sections, even if they are not inheriting BaseSection:
+# V1_SECTION_NAME_RE = r'nomad\.datamodel\.metainfo\.basesections\.v1\..+'
+
+V1_SECTION_NAME_RE = r'nomad\.datamodel\.metainfo\.basesections\.v1\.BaseSection'
 
 
 @activity.defn
@@ -46,13 +50,24 @@ def validate_input(data: MigrationActionInput) -> None:
 
 @activity.defn
 def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
-    """Find staging archive mainfiles whose indexed schema includes v1 BaseSection."""
-    query = {
-        'published': False,
-        'section_defs.definition_qualified_name': BaseSectionV1.m_def.qualified_name(),
-    }
+    """Find staging ELN entries that contain or inherit v1 BaseSection."""
+    query = Q(
+        'bool',
+        filter=[
+            Q('term', published=False),
+            Q(
+                'nested',
+                path='section_defs',
+                query=Q(
+                    'regexp',
+                    **{'section_defs.definition_qualified_name': V1_SECTION_NAME_RE},
+                ),
+            ),
+            Q('regexp', **{'mainfile.keyword': MAINFILE_NAME_RE}),
+        ],
+    )
     if data.target_upload_ids:
-        query['upload_id:any'] = data.target_upload_ids
+        query &= Q('terms', upload_id=data.target_upload_ids)
 
     entries = search_iterator(
         owner='admin',
@@ -60,7 +75,6 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
         query=query,
         required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),  # type: ignore
     )
-    mainfile_name_re = re.compile(MAINFILE_NAME_RE)
     migration_entries = []
     for entry in entries:
         entry_id = entry['entry_id']
