@@ -14,7 +14,7 @@ classifiers = [
 ]
 name = "basesection-migration"
 description = "A plugin meant for migrating NOMAD entries basesections v1 to v2."
-version = "0.1.0"
+dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -126,9 +126,8 @@ basesection_migration = ["scripts/transformation_rules/*.json"]
 # parser_entry_point = "basesection_migration.parsers:parser_entry_point"
 migrate_basesections_action = "basesection_migration.actions:migrate_basesections"
 
-
-
-
 [tool.cruft]
 # Avoid updating workflow files, this leads to permissions issues
 skip = [".github/*"]
+
+[tool.setuptools_scm]
