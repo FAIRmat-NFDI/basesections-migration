@@ -7,27 +7,42 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from nomad.common import now
 
-from basesection_migration.actions import activities, migrate_basesections, workflows
+from basesection_migration.actions import activities, workflows
 from basesection_migration.actions.models import MigrationActionInput
 
 
 @pytest.fixture
-def admin(monkeypatch):
+def staging_upload_files(monkeypatch):
     monkeypatch.setattr(activities.config.services, 'admin_user_id', 'admin')
-    return 'admin'
+    get_upload_files = Mock()
+    monkeypatch.setattr(activities, 'get_staging_upload_files', get_upload_files)
+    return get_upload_files
 
 
-def test_validate_admin_accepts_administrator(admin):
-    assert activities.validate_admin(admin) is None
+@pytest.mark.parametrize(
+    'user_id,invalid_upload,checked_uploads',
+    [
+        pytest.param('other', None, [], id='non-admin'),
+        pytest.param('admin', 'report-upload', ['report-upload'], id='invalid-report'),
+        pytest.param(
+            'admin',
+            'target-b',
+            ['report-upload', 'target-a', 'target-b'],
+            id='invalid-target',
+        ),
+    ],
+)
+def test_workflow_stops_on_invalid_input(
+    monkeypatch, staging_upload_files, user_id, invalid_upload, checked_uploads
+):
+    def get_upload_files(upload_id):
+        if upload_id == invalid_upload:
+            raise ValueError('Invalid staging upload.')
 
+    staging_upload_files.side_effect = get_upload_files
 
-def test_validate_admin_rejects_other_users(admin):
-    with pytest.raises(PermissionError, match='administrator'):
-        activities.validate_admin('other')
-
-
-def test_workflow_stops_before_work_for_non_admin(admin, monkeypatch):
     async def execute(activity, argument, **kwargs):
+        assert activity is activities.validate_input
         return activity(argument)
 
     execute_activity = AsyncMock(side_effect=execute)
@@ -35,29 +50,37 @@ def test_workflow_stops_before_work_for_non_admin(admin, monkeypatch):
     monkeypatch.setattr(workflows.workflow, 'execute_activity', execute_activity)
     monkeypatch.setattr(workflows.workflow, 'execute_child_workflow', child_workflow)
 
-    with pytest.raises(PermissionError, match='administrator'):
-        asyncio.run(
-            workflows.MigrateBaseSectionsWorkflow().run(
-                MigrationActionInput(user_id='other', upload_id='report-upload')
-            )
-        )
+    data = MigrationActionInput(
+        user_id=user_id,
+        upload_id='report-upload',
+        target_upload_ids=['target-a', 'target-b'],
+    )
+    error = PermissionError if user_id != 'admin' else ValueError
+    with pytest.raises(error):
+        asyncio.run(workflows.MigrateBaseSectionsWorkflow().run(data))
 
     execute_activity.assert_awaited_once()
     call = execute_activity.await_args
-    assert call.args == (activities.validate_admin, 'other')
+    assert call.args == (activities.validate_input, data)
     assert call.kwargs['retry_policy'].maximum_attempts == 1
+    assert [
+        call.args[0] for call in staging_upload_files.call_args_list
+    ] == checked_uploads
     child_workflow.assert_not_awaited()
 
 
-def test_workflow_validates_admin_before_report_and_discovery(admin, monkeypatch):
+@pytest.mark.parametrize('target_upload_ids', [[], ['target-a', 'target-b']])
+def test_workflow_validates_input_before_discovery(
+    monkeypatch, staging_upload_files, target_upload_ids
+):
     async def execute(activity, argument, **kwargs):
-        if activity is activities.validate_admin:
+        if activity is activities.validate_input:
             return activity(argument)
         if activity is activities.find_v1_entries:
             return []
         if activity is activities.write_report:
             return 'report.json'
-        return None
+        raise AssertionError(f'Unexpected activity: {activity.__name__}')
 
     execute_activity = AsyncMock(side_effect=execute)
     monkeypatch.setattr(workflows.workflow, 'execute_activity', execute_activity)
@@ -66,46 +89,20 @@ def test_workflow_validates_admin_before_report_and_discovery(admin, monkeypatch
         'info',
         lambda: SimpleNamespace(workflow_id='migration', start_time=now()),
     )
-    result = asyncio.run(
-        workflows.MigrateBaseSectionsWorkflow().run(
-            MigrationActionInput(user_id=admin, upload_id='report-upload')
-        )
+    data = MigrationActionInput(
+        user_id='admin', upload_id='report-upload', target_upload_ids=target_upload_ids
     )
+    result = asyncio.run(workflows.MigrateBaseSectionsWorkflow().run(data))
 
     assert [call.args[0] for call in execute_activity.await_args_list] == [
-        activities.validate_admin,
-        activities.validate_report_upload,
+        activities.validate_input,
         activities.find_v1_entries,
         activities.write_report,
     ]
+    assert execute_activity.await_args_list[0].args == (activities.validate_input, data)
+    assert [call.args[0] for call in staging_upload_files.call_args_list] == [
+        'report-upload',
+        *target_upload_ids,
+    ]
     assert result.report_path == 'report.json'
     assert result.found_count == 0
-
-
-@pytest.mark.parametrize(
-    'owner,published,staging,error',
-    [
-        ('other', False, True, PermissionError),
-        ('admin', True, True, ValueError),
-        ('admin', False, False, ValueError),
-    ],
-)
-def test_report_upload_constraints_remain(
-    monkeypatch, owner, published, staging, error
-):
-    monkeypatch.setattr(
-        activities.Upload,
-        'get',
-        Mock(return_value=SimpleNamespace(main_author=owner, published=published)),
-    )
-    monkeypatch.setattr(
-        activities.StagingUploadFiles, 'exists_for', Mock(return_value=staging)
-    )
-    with pytest.raises(error):
-        activities.validate_report_upload(
-            MigrationActionInput(user_id='admin', upload_id='report-upload')
-        )
-
-
-def test_admin_validation_registered():
-    assert activities.validate_admin in migrate_basesections.load().activities
