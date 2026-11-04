@@ -20,33 +20,28 @@ from basesection_migration.actions.models import (
     ReportInput,
     TransformEntryInput,
 )
+from basesection_migration.actions.utils import get_staging_upload_files
 from basesection_migration.scripts.migrate import migrate_input_archive
 
 MAINFILE_NAME_RE = r'.*(archive|metainfo)\.(json|yaml|yml)$'
 
 
 @activity.defn
-def validate_admin(user_id: str) -> None:
-    """Reject unauthorized users before the migration workflow does any work."""
-    if user_id != config.services.admin_user_id:
+def validate_input(data: MigrationActionInput) -> None:
+    """
+    Before the migration workflow starts, fail if
+
+    - user is not admin
+    - upload_id does not resolve to a staging upload for saving the report
+    - target_upload_ids does not resolve to staging uploads
+    """
+    if data.user_id != config.services.admin_user_id:
         raise PermissionError(
             'Only the configured NOMAD administrator can run this action.'
         )
 
-
-def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:
-    upload = Upload.get(data.upload_id)
-    if upload is None:
-        raise ValueError(f'Report upload {data.upload_id} does not exist.')
-    if upload.published or not StagingUploadFiles.exists_for(data.upload_id):
-        raise ValueError('The report upload must be an unpublished staging upload.')
-    return StagingUploadFiles(data.upload_id)
-
-
-@activity.defn
-def validate_report_upload(data: MigrationActionInput) -> None:
-    """Fail before migration starts if the report cannot be saved."""
-    _report_upload(data)
+    for upload_id in [data.upload_id, *data.target_upload_ids]:
+        get_staging_upload_files(upload_id)
 
 
 @activity.defn
@@ -63,22 +58,17 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
         owner='admin',
         user_id=data.user_id,
         query=query,
-        required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),
+        required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),  # type: ignore
     )
     mainfile_name_re = re.compile(MAINFILE_NAME_RE)
     migration_entries = []
     for entry in entries:
-        upload_id = entry.get('upload_id')
-        mainfile = entry.get('mainfile')
-        if (
-            not StagingUploadFiles.exists_for(upload_id)
-            or not mainfile
-            or not mainfile_name_re.fullmatch(mainfile)
-        ):
-            continue
+        entry_id = entry['entry_id']
+        upload_id = entry['upload_id']
+        mainfile = entry['mainfile']
 
         # skip if a backup mainfile exists, i.e., the mainfile was already transformed
-        upload_files = StagingUploadFiles.get(upload_id)
+        upload_files = get_staging_upload_files(upload_id)
         mainfile_path = Path(mainfile)
         suffix = mainfile_path.suffix
         backup_mainfile_path = f'{mainfile_path.name.removesuffix(suffix)}.v1{suffix}'
@@ -87,9 +77,7 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 
         migration_entries.append(
             MigrationEntry(
-                entry_ref=EntryRef(
-                    entry_id=entry['entry_id'], upload_id=entry['upload_id']
-                ),
+                entry_ref=EntryRef(entry_id=entry_id, upload_id=upload_id),
                 mainfile=mainfile,
                 mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
             )
@@ -106,9 +94,7 @@ def transform_entry(data: TransformEntryInput) -> bool:
 @activity.defn
 def write_report(data: ReportInput) -> str:
     """Write a durable JSON report into the administrator's staging upload."""
-    upload_files = _report_upload(
-        MigrationActionInput(user_id=data.user_id, upload_id=data.upload_id)
-    )
+    upload_files = get_staging_upload_files(data.upload_id)
     safe_workflow_id = re.sub(r'[^A-Za-z0-9._-]', '_', data.workflow_id)
     report_path = f'basesection_migration_{safe_workflow_id}.json'
     report = {
