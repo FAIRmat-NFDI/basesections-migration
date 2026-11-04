@@ -93,7 +93,8 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 
         migration_entries.append(
             MigrationEntry(
-                entry_ref=EntryRef(entry_id=entry_id, upload_id=upload_id),
+                entry_id=entry_id,
+                upload_id=upload_id,
                 mainfile=mainfile,
                 mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
             )
