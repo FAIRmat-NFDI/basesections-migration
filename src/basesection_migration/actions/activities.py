@@ -13,10 +13,10 @@ from temporalio import activity
 from basesection_migration.actions.models import (
     EntryRef,
     FindEntriesInput,
+    FindReferencingEntriesInput,
     MigrationActionInput,
     MigrationEntry,
     ReportInput,
-    TransformEntryInput,
 )
 from basesection_migration.actions.utils import get_staging_upload_files
 from basesection_migration.scripts.migrate import migrate_input_archive
@@ -32,8 +32,7 @@ V1_SECTION_NAME_RE = r'nomad\.datamodel\.metainfo\.basesections\.v1\.BaseSection
 
 @activity.defn
 def validate_input(data: MigrationActionInput) -> None:
-    """
-    Before the migration workflow starts, fail if
+    """Before the migration workflow starts, fail if
 
     - user is not admin
     - upload_id does not resolve to a staging upload for saving the report
@@ -50,7 +49,11 @@ def validate_input(data: MigrationActionInput) -> None:
 
 @activity.defn
 def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
-    """Find staging ELN entries that contain or inherit v1 BaseSection."""
+    """Find unpublished entries that contain or inherit v1 BaseSection for migration.
+
+    Entries that contain or inherit ArchiveSection available in
+    `nomad.datamodel.metainfo.basesections.v1` are ignored for now.
+    """
     query = Q(
         'bool',
         filter=[
@@ -93,7 +96,8 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 
         migration_entries.append(
             MigrationEntry(
-                entry_ref=EntryRef(entry_id=entry_id, upload_id=upload_id),
+                entry_id=entry_id,
+                upload_id=upload_id,
                 mainfile=mainfile,
                 mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
             )
@@ -102,8 +106,56 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 
 
 @activity.defn
-def transform_entry(data: TransformEntryInput) -> bool:
+def find_referencing_entries(
+    data: FindReferencingEntriesInput,
+) -> list[EntryRef]:
+    """Find unpublished entries that contain reference to the migration entries."""
+    target_ids = list(dict.fromkeys(data.target_entry_ids))
+    if not target_ids:
+        return []
+
+    query = Q(
+        'bool',
+        filter=[
+            Q('term', published=False),
+            Q('regexp', **{'mainfile.keyword': MAINFILE_NAME_RE}),
+            Q(
+                'nested',
+                path='entry_references',
+                query=Q('terms', **{'entry_references.target_entry_id': target_ids}),
+            ),
+        ],
+    )
+    entries = search_iterator(
+        owner='admin',
+        user_id=data.user_id,
+        query=query,
+        required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),  # type: ignore
+    )
+    referencing_entries = []
+    for entry in entries:
+        mainfile = entry['mainfile']
+        upload_files = get_staging_upload_files(entry['upload_id'])
+        referencing_entries.append(
+            EntryRef(
+                entry_id=entry['entry_id'],
+                upload_id=entry['upload_id'],
+                mainfile=mainfile,
+                mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
+            )
+        )
+    return referencing_entries
+
+
+@activity.defn
+def transform_entry(data: MigrationEntry) -> bool:
     """Transform a resolved mainfile, returning whether it was migrated."""
+
+    # TODO: Populate data.entry_data_m_def of the migration entries when their
+    # archive mainfiles are opened. This information will be required for the
+    # activity that updates the reference paths in other entries that point
+    # to migration entries.
+
     return migrate_input_archive(data.mainfile_os_path)
 
 

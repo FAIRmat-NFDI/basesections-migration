@@ -14,13 +14,11 @@ with workflow.unsafe.imports_passed_through():
         write_report,
     )
     from basesection_migration.actions.models import (
-        EntryRef,
         FindEntriesInput,
         MigrationActionInput,
         MigrationActionOutput,
         MigrationEntry,
         ReportInput,
-        TransformEntryInput,
         TransformEntryResult,
         TransformUploadInput,
         TransformUploadResult,
@@ -46,7 +44,7 @@ class TransformUploadWorkflow:
                 try:
                     transformed = await workflow.execute_activity(
                         transform_entry,
-                        TransformEntryInput(mainfile_os_path=path),
+                        entry,
                         start_to_close_timeout=timedelta(hours=2),
                         retry_policy=NO_RETRY,
                     )
@@ -62,7 +60,7 @@ class TransformUploadWorkflow:
 
             status, reason = outcomes[path]
             result = TransformEntryResult(
-                entry_ref=entry.entry_ref,
+                entry_ref=entry,
                 mainfile=entry.mainfile,
                 status=status,
                 reason=reason,
@@ -98,13 +96,13 @@ class MigrateBaseSectionsWorkflow:
             start_to_close_timeout=timedelta(hours=2),
             retry_policy=NO_RETRY,
         )
-        transformed: list[EntryRef] = []
+        transformed: list[MigrationEntry] = []
         skipped: list[TransformEntryResult] = []
         failed: list[TransformEntryResult] = []
 
         entries_by_upload: dict[str, list[MigrationEntry]] = {}
         for entry in found_migration_entries:
-            entries_by_upload.setdefault(entry.entry_ref.upload_id, []).append(entry)
+            entries_by_upload.setdefault(entry.upload_id, []).append(entry)
 
         for upload_id, entries in entries_by_upload.items():
             result = await workflow.execute_child_workflow(
@@ -128,7 +126,7 @@ class MigrateBaseSectionsWorkflow:
                 upload_id=data.upload_id,
                 workflow_id=workflow.info().workflow_id,
                 started_at=workflow.info().start_time.isoformat(),
-                found=[entry.entry_ref for entry in found_migration_entries],
+                found=found_migration_entries,
                 transformed=transformed,
                 skipped=skipped,
                 failed=failed,

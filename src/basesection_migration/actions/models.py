@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 class EntryRef(BaseModel):
     entry_id: str
     upload_id: str
-
-
-class MigrationEntry(BaseModel):
-    entry_ref: EntryRef
     mainfile: str
     mainfile_os_path: str
+
+
+class MigrationEntry(EntryRef):
+    entry_data_m_def: str | None = None
 
 
 class MigrationActionInput(BaseModel):
@@ -31,6 +31,11 @@ class FindEntriesInput(BaseModel):
     target_upload_ids: list[str] = Field(default_factory=list)
 
 
+class FindReferencingEntriesInput(BaseModel):
+    user_id: str
+    target_entry_ids: list[str]
+
+
 class TransformUploadInput(BaseModel):
     target_upload_id: str = Field(
         description='ID of the upload containing the entries to transform.'
@@ -40,21 +45,15 @@ class TransformUploadInput(BaseModel):
     )
 
 
-class TransformEntryInput(BaseModel):
-    mainfile_os_path: str = Field(
-        description='Path to the mainfile on the local filesystem.'
-    )
-
-
 class TransformEntryResult(BaseModel):
-    entry_ref: EntryRef
+    entry_ref: MigrationEntry
     mainfile: str | None = None
     status: Literal['transformed', 'skipped', 'failed']
     reason: str | None = None
 
 
 class TransformUploadResult(BaseModel):
-    transformed: list[EntryRef] = Field(default_factory=list)
+    transformed: list[MigrationEntry] = Field(default_factory=list)
     skipped: list[TransformEntryResult] = Field(default_factory=list)
     failed: list[TransformEntryResult] = Field(default_factory=list)
 
@@ -64,8 +63,8 @@ class ReportInput(BaseModel):
     upload_id: str
     workflow_id: str
     started_at: str
-    found: list[EntryRef]
-    transformed: list[EntryRef]
+    found: list[MigrationEntry]
+    transformed: list[MigrationEntry]
     skipped: list[TransformEntryResult]
     failed: list[TransformEntryResult]
     error: str | None = None
@@ -73,7 +72,7 @@ class ReportInput(BaseModel):
 
 class MigrationActionOutput(BaseModel):
     found_count: int
-    transformed: list[EntryRef]
+    transformed: list[MigrationEntry]
     skipped_count: int
     failed_count: int
     report_path: str
