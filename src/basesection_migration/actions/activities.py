@@ -49,10 +49,10 @@ def validate_input(data: MigrationActionInput) -> None:
 
 @activity.defn
 def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
-    """Find staging ELN entries that contain or inherit v1 BaseSection.
+    """Find unpublished entries that contain or inherit v1 BaseSection for migration.
 
-    Sections available in nomad.datamodel.metainfo.basesections.v1
-    but not inheriting BaseSection are not found.
+    Entries that contain or inherit ArchiveSection available in
+    `nomad.datamodel.metainfo.basesections.v1` are ignored for now.
     """
     query = Q(
         'bool',
@@ -109,13 +109,7 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 def find_referencing_entries(
     data: FindReferencingEntriesInput,
 ) -> list[EntryRef]:
-    """Find unpublished archive mainfiles referencing any of the ELN entries targeted
-    for migration.
-
-    TODO: Populate m_def of the target ELN entries when their archive mainfiles
-    are opened during the migration activity. This information needs to be wired
-    among different activities.
-    """
+    """Find unpublished entries that contain reference to the migration entries."""
     target_ids = list(dict.fromkeys(data.target_entry_ids))
     if not target_ids:
         return []
@@ -138,11 +132,11 @@ def find_referencing_entries(
         query=query,
         required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),  # type: ignore
     )
-    migration_entries = []
+    referencing_entries = []
     for entry in entries:
         mainfile = entry['mainfile']
         upload_files = get_staging_upload_files(entry['upload_id'])
-        migration_entries.append(
+        referencing_entries.append(
             EntryRef(
                 entry_id=entry['entry_id'],
                 upload_id=entry['upload_id'],
@@ -150,12 +144,18 @@ def find_referencing_entries(
                 mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
             )
         )
-    return migration_entries
+    return referencing_entries
 
 
 @activity.defn
 def transform_entry(data: MigrationEntry) -> bool:
     """Transform a resolved mainfile, returning whether it was migrated."""
+
+    # TODO: Populate data.entry_data_m_def of the migration entries when their
+    # archive mainfiles are opened. This information will be required for the
+    # activity that updates the reference paths in other entries that point
+    # to migration entries.
+
     return migrate_input_archive(data.mainfile_os_path)
 
 
