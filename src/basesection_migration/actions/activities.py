@@ -85,7 +85,9 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
         upload_files = get_staging_upload_files(upload_id)
         mainfile_path = Path(mainfile)
         suffix = mainfile_path.suffix
-        backup_mainfile_path = f'{mainfile_path.name.removesuffix(suffix)}.v1{suffix}'
+        backup_mainfile_path = mainfile_path.with_name(
+            f'{mainfile_path.stem}.v1{suffix}'
+        ).as_posix()
         if upload_files.raw_path_exists(backup_mainfile_path):
             continue
 
