@@ -32,8 +32,7 @@ V1_SECTION_NAME_RE = r'nomad\.datamodel\.metainfo\.basesections\.v1\.BaseSection
 
 @activity.defn
 def validate_input(data: MigrationActionInput) -> None:
-    """
-    Before the migration workflow starts, fail if
+    """Before the migration workflow starts, fail if
 
     - user is not admin
     - upload_id does not resolve to a staging upload for saving the report
@@ -50,7 +49,11 @@ def validate_input(data: MigrationActionInput) -> None:
 
 @activity.defn
 def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
-    """Find staging ELN entries that contain or inherit v1 BaseSection."""
+    """Find staging ELN entries that contain or inherit v1 BaseSection.
+
+    Sections available in nomad.datamodel.metainfo.basesections.v1
+    but not inheriting BaseSection are not found.
+    """
     query = Q(
         'bool',
         filter=[
