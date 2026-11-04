@@ -6,7 +6,7 @@ from pathlib import Path
 
 from nomad.app.v1.models.models import MetadataRequired
 from nomad.config import config
-from nomad.datamodel.metainfo.basesections.v1 import BaseSection
+from nomad.datamodel.metainfo.basesections.v1 import BaseSection as BaseSectionV1
 from nomad.files import StagingUploadFiles
 from nomad.processing.data import Upload
 from nomad.search import search_iterator
@@ -26,16 +26,20 @@ MAINFILE_NAME_RE = r'.*(archive|metainfo)\.(json|yaml|yml)$'
 
 
 @activity.defn
-def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
-    """Find staging archive mainfiles whose indexed schema includes v1 BaseSection."""
-    if data.user_id != config.services.admin_user_id:
+def validate_admin(user_id: str) -> None:
+    """Reject unauthorized users before the migration workflow does any work."""
+    if user_id != config.services.admin_user_id:
         raise PermissionError(
             'Only the configured NOMAD administrator can run this action.'
         )
 
+
+@activity.defn
+def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
+    """Find staging archive mainfiles whose indexed schema includes v1 BaseSection."""
     query = {
         'published': False,
-        'section_defs.definition_qualified_name': BaseSection.m_def.qualified_name(),
+        'section_defs.definition_qualified_name': BaseSectionV1.m_def.qualified_name(),
     }
     if data.target_upload_ids:
         query['upload_id:any'] = data.target_upload_ids
@@ -85,11 +89,6 @@ def transform_entry(data: TransformEntryInput) -> bool:
 
 
 def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:
-    if data.user_id != config.services.admin_user_id:
-        raise PermissionError(
-            'Only the configured NOMAD administrator can migrate entries.'
-        )
-
     upload = Upload.get(data.upload_id)
     if upload is None:
         raise ValueError(f'Report upload {data.upload_id} does not exist.')
