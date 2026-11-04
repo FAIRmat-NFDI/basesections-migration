@@ -31,18 +31,17 @@ class FindEntriesInput(BaseModel):
     target_upload_ids: list[str] = Field(default_factory=list)
 
 
+class FindReferencingEntriesInput(BaseModel):
+    user_id: str
+    target_entry_ids: list[str]
+
+
 class TransformUploadInput(BaseModel):
     target_upload_id: str = Field(
         description='ID of the upload containing the entries to transform.'
     )
     entries: list[MigrationEntry] = Field(
         description='Entries and resolved mainfile paths to transform.'
-    )
-
-
-class TransformEntryInput(BaseModel):
-    mainfile_os_path: str = Field(
-        description='Path to the mainfile on the local filesystem.'
     )
 
 

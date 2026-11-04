@@ -13,10 +13,10 @@ from temporalio import activity
 from basesection_migration.actions.models import (
     EntryRef,
     FindEntriesInput,
+    FindReferencingEntriesInput,
     MigrationActionInput,
     MigrationEntry,
     ReportInput,
-    TransformEntryInput,
 )
 from basesection_migration.actions.utils import get_staging_upload_files
 from basesection_migration.scripts.migrate import migrate_input_archive
@@ -103,7 +103,55 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 
 
 @activity.defn
-def transform_entry(data: TransformEntryInput) -> bool:
+def find_referencing_entries(
+    data: FindReferencingEntriesInput,
+) -> list[EntryRef]:
+    """Find unpublished archive mainfiles referencing any of the ELN entries targeted
+    for migration.
+
+    TODO: Populate m_def of the target ELN entries when their archive mainfiles
+    are opened during the migration activity. This information needs to be wired
+    among different activities.
+    """
+    target_ids = list(dict.fromkeys(data.target_entry_ids))
+    if not target_ids:
+        return []
+
+    query = Q(
+        'bool',
+        filter=[
+            Q('term', published=False),
+            Q('regexp', **{'mainfile.keyword': MAINFILE_NAME_RE}),
+            Q(
+                'nested',
+                path='entry_references',
+                query=Q('terms', **{'entry_references.target_entry_id': target_ids}),
+            ),
+        ],
+    )
+    entries = search_iterator(
+        owner='admin',
+        user_id=data.user_id,
+        query=query,
+        required=MetadataRequired(include=['entry_id', 'upload_id', 'mainfile']),  # type: ignore
+    )
+    migration_entries = []
+    for entry in entries:
+        mainfile = entry['mainfile']
+        upload_files = get_staging_upload_files(entry['upload_id'])
+        migration_entries.append(
+            EntryRef(
+                entry_id=entry['entry_id'],
+                upload_id=entry['upload_id'],
+                mainfile=mainfile,
+                mainfile_os_path=upload_files.raw_file_object(mainfile).os_path,
+            )
+        )
+    return migration_entries
+
+
+@activity.defn
+def transform_entry(data: MigrationEntry) -> bool:
     """Transform a resolved mainfile, returning whether it was migrated."""
     return migrate_input_archive(data.mainfile_os_path)
 
