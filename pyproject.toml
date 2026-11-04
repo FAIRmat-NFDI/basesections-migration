@@ -25,8 +25,7 @@ maintainers = [
 ]
 license = { file = "LICENSE" }
 dependencies = [
-    "nomad-lab @ git+https://gitlab.mpcdf.mpg.de/nomad-lab/nomad-FAIR@develop",
-    "python-magic-bin; sys_platform == 'win32'",
+    "nomad-lab>=2.0.0",
     "jsonschema",
     "pydantic",
     "temporalio",
@@ -37,7 +36,12 @@ dependencies = [
 Repository = "https://github.com/FAIRmat-NFDI/basesection-migration"
 
 [project.optional-dependencies]
-dev = ["ruff", "pytest", "structlog"]
+dev = [
+    "nomad-lab[infrastructure]>=2.0.0",
+    "ruff",
+    "pytest",
+    "structlog"
+]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
