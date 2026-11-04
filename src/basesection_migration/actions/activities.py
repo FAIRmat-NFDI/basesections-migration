@@ -34,6 +34,21 @@ def validate_admin(user_id: str) -> None:
         )
 
 
+def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:
+    upload = Upload.get(data.upload_id)
+    if upload is None:
+        raise ValueError(f'Report upload {data.upload_id} does not exist.')
+    if upload.published or not StagingUploadFiles.exists_for(data.upload_id):
+        raise ValueError('The report upload must be an unpublished staging upload.')
+    return StagingUploadFiles(data.upload_id)
+
+
+@activity.defn
+def validate_report_upload(data: MigrationActionInput) -> None:
+    """Fail before migration starts if the report cannot be saved."""
+    _report_upload(data)
+
+
 @activity.defn
 def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
     """Find staging archive mainfiles whose indexed schema includes v1 BaseSection."""
@@ -86,23 +101,6 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 def transform_entry(data: TransformEntryInput) -> bool:
     """Transform a resolved mainfile, returning whether it was migrated."""
     return migrate_input_archive(data.mainfile_os_path)
-
-
-def _report_upload(data: MigrationActionInput) -> StagingUploadFiles:
-    upload = Upload.get(data.upload_id)
-    if upload is None:
-        raise ValueError(f'Report upload {data.upload_id} does not exist.')
-    if upload.main_author != data.user_id:
-        raise PermissionError('The report upload must be owned by the administrator.')
-    if upload.published or not StagingUploadFiles.exists_for(data.upload_id):
-        raise ValueError('The report upload must be an unpublished staging upload.')
-    return StagingUploadFiles(data.upload_id)
-
-
-@activity.defn
-def validate_report_upload(data: MigrationActionInput) -> None:
-    """Fail before migration starts if the report cannot be saved."""
-    _report_upload(data)
 
 
 @activity.defn
