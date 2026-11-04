@@ -6,11 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from basesection_migration.actions import activities
-from basesection_migration.actions.models import (
-    EntryRef,
-    FindEntriesInput,
-    MigrationEntry,
-)
+from basesection_migration.actions.models import FindEntriesInput, MigrationEntry
 
 
 @pytest.fixture
@@ -77,7 +73,8 @@ def test_returns_migration_entries_and_skips_backed_up_files(search, monkeypatch
 
     assert result == [
         MigrationEntry(
-            entry_ref=EntryRef(entry_id='eligible', upload_id='upload'),
+            entry_id='eligible',
+            upload_id='upload',
             mainfile='example.archive.yaml',
             mainfile_os_path='/staging/example',
         )
