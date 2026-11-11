@@ -1,0 +1,12 @@
+{
+    "rules": {
+        "move_puresubstance_reference": {
+            "source": "pure_substance",
+            "target": ""
+        },
+        "aaa":{
+            "source": "aa[n1].bb.cc[n2].dd",
+            "target": "x[n1].y[n2]"
+        }
+    }
+}
