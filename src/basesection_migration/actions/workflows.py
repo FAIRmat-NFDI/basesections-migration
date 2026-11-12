@@ -158,45 +158,45 @@ class MigrateBaseSectionsWorkflow:
             retry_policy=NO_RETRY,
         )
 
-        try:
-            if transformed_entry_m_defs:
-                await workflow.execute_child_workflow(
-                    TransformReferencesWorkflow.run,
-                    TransformReferencesInput(
-                        user_id=data.user_id,
-                        transformed_entries_path=transformed_entries_path,
-                    ),
-                    id=f'{workflow.info().workflow_id}-transform-references',
-                    parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
-                    retry_policy=NO_RETRY,
-                )
-
-            report_path = await workflow.execute_activity(
-                write_report,
-                ReportInput(
+        if transformed_entry_m_defs:
+            await workflow.execute_child_workflow(
+                TransformReferencesWorkflow.run,
+                TransformReferencesInput(
                     user_id=data.user_id,
-                    upload_id=data.upload_id,
-                    workflow_id=workflow.info().workflow_id,
-                    started_at=workflow.info().start_time.isoformat(),
-                    found=found_migration_entries,
-                    transformed=transformed,
-                    skipped=skipped,
-                    failed=failed,
+                    transformed_entries_path=transformed_entries_path,
                 ),
-                start_to_close_timeout=timedelta(hours=2),
+                id=f'{workflow.info().workflow_id}-transform-references',
+                parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
                 retry_policy=NO_RETRY,
             )
-            return MigrationActionOutput(
-                found_count=len(found_migration_entries),
+
+        report_path = await workflow.execute_activity(
+            write_report,
+            ReportInput(
+                user_id=data.user_id,
+                upload_id=data.upload_id,
+                workflow_id=workflow.info().workflow_id,
+                started_at=workflow.info().start_time.isoformat(),
+                found=found_migration_entries,
                 transformed=transformed,
-                skipped_count=len(skipped),
-                failed_count=len(failed),
-                report_path=report_path,
-            )
-        finally:
-            await workflow.execute_activity(
-                cleanup,
-                [transformed_entries_path],
-                start_to_close_timeout=timedelta(minutes=5),
-                retry_policy=NO_RETRY,
-            )
+                skipped=skipped,
+                failed=failed,
+            ),
+            start_to_close_timeout=timedelta(hours=2),
+            retry_policy=NO_RETRY,
+        )
+
+        await workflow.execute_activity(
+            cleanup,
+            [transformed_entries_path],
+            start_to_close_timeout=timedelta(minutes=5),
+            retry_policy=NO_RETRY,
+        )
+
+        return MigrationActionOutput(
+            found_count=len(found_migration_entries),
+            transformed=transformed,
+            skipped_count=len(skipped),
+            failed_count=len(failed),
+            report_path=report_path,
+        )
