@@ -1,7 +1,6 @@
 """Temporal workflows for the BaseSection v1 to v2 migration."""
 
 from datetime import timedelta
-from typing import Literal
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -37,39 +36,32 @@ class TransformUploadWorkflow:
     @workflow.run
     async def run(self, data: TransformUploadInput) -> TransformUploadResult:
         output = TransformUploadResult()
-        outcomes: dict[
-            str, tuple[Literal['transformed', 'skipped', 'failed'], str | None]
-        ] = {}
+        outcomes: dict[str, TransformEntryResult] = {}
         for entry in data.entries:
             path = entry.mainfile_os_path
             if path not in outcomes:
                 try:
-                    transformed = await workflow.execute_activity(
+                    outcomes[path] = await workflow.execute_activity(
                         transform_entry,
                         entry,
                         start_to_close_timeout=timedelta(hours=2),
                         retry_policy=NO_RETRY,
                     )
-                    if transformed:
-                        outcomes[path] = ('transformed', None)
-                    else:
-                        outcomes[path] = (
-                            'skipped',
-                            'Archive is ineligible or already has a v1 backup',
-                        )
                 except Exception as exc:
-                    outcomes[path] = ('failed', str(exc))
+                    outcomes[path] = TransformEntryResult(
+                        entry_ref=entry, status='failed', reason=str(exc)
+                    )
 
-            status, reason = outcomes[path]
+            outcome = outcomes[path]
+            entry.entry_data_m_def = outcome.entry_ref.entry_data_m_def
             result = TransformEntryResult(
                 entry_ref=entry,
-                mainfile=entry.mainfile,
-                status=status,
-                reason=reason,
+                status=outcome.status,
+                reason=outcome.reason,
             )
-            if status == 'transformed':
+            if result.status == 'transformed':
                 output.transformed.append(result.entry_ref)
-            elif status == 'skipped':
+            elif result.status == 'skipped':
                 output.skipped.append(result)
             else:
                 output.failed.append(result)
