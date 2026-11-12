@@ -77,7 +77,7 @@ def test_cleanup_removes_selected_files_and_tolerates_missing_paths(action_conte
         pytest.param(['upload-a', 'upload-b'], True, id='report-failure'),
     ],
 )
-def test_parent_reports_child_results_and_cleans_artifacts(
+def test_parent_cleans_artifacts_only_on_success(
     action_context, monkeypatch, tmp_path, upload_ids, report_fails
 ):
     found = []
@@ -193,12 +193,12 @@ def test_parent_reports_child_results_and_cleans_artifacts(
         'write_transformed_entries',
         *(['references'] if upload_ids else []),
         'write_report',
-        'cleanup',
+        *([] if report_fails else ['cleanup']),
     ]
-    assert not mapping_paths[0].exists()
+    assert mapping_paths[0].exists() == report_fails
 
 
-def test_parent_cleans_artifacts_when_reference_child_fails(
+def test_parent_preserves_artifacts_when_reference_child_fails(
     action_context, monkeypatch
 ):
     entry = MigrationEntry(
@@ -208,8 +208,9 @@ def test_parent_cleans_artifacts_when_reference_child_fails(
         mainfile_os_path='/staging/upload/raw/target.archive.json',
         entry_data_m_def='example.v1.Schema',
     )
-    path = '/actions/migration/artifacts/transformed_entries.json'
-    execute_activity = AsyncMock(side_effect=[None, [entry], path, None])
+    mapping = {entry.entry_id: entry.entry_data_m_def}
+    path = activities.write_transformed_entries(mapping)
+    execute_activity = AsyncMock(side_effect=[None, [entry], path])
     monkeypatch.setattr(workflows.workflow, 'execute_activity', execute_activity)
     monkeypatch.setattr(
         workflows.workflow,
@@ -233,6 +234,5 @@ def test_parent_cleans_artifacts_when_reference_child_fails(
         activities.validate_input,
         activities.find_v1_entries,
         activities.write_transformed_entries,
-        activities.cleanup,
     ]
-    assert execute_activity.await_args.args == (activities.cleanup, [path])
+    assert json.loads(Path(path).read_text(encoding='utf-8')) == mapping
