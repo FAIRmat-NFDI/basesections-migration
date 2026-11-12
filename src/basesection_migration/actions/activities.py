@@ -196,6 +196,13 @@ def fix_reference_paths(data: FixReferencePathsInput) -> None:
 
 
 @activity.defn
+def cleanup(paths: list[str]) -> None:
+    """Remove temporary artifact files, ignoring those that are already missing."""
+    for path in paths:
+        Path(path).unlink(missing_ok=True)
+
+
+@activity.defn
 def write_report(data: ReportInput) -> str:
     """Write a durable JSON report into the administrator's staging upload."""
     upload_files = get_staging_upload_files(data.upload_id)

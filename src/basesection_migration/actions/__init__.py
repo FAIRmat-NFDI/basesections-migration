@@ -13,6 +13,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
         from nomad.actions import Action
 
         from basesection_migration.actions.activities import (
+            cleanup,
             find_referencing_entries,
             find_v1_entries,
             fix_reference_paths,
@@ -38,6 +39,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
                 write_transformed_entries,
                 fix_reference_paths,
                 write_report,
+                cleanup,
             ],
         )
 
