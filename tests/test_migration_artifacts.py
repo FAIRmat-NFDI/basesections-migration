@@ -122,7 +122,6 @@ def test_parent_reports_child_results_and_cleans_artifacts(
             )
             return found
         if activity is activities.write_transformed_entries:
-            assert argument == expected_mapping
             path = activity(argument)
             mapping_paths.append(Path(path))
             return path
@@ -139,6 +138,13 @@ def test_parent_reports_child_results_and_cleans_artifacts(
         raise AssertionError(f'Unexpected activity: {activity.__name__}')
 
     async def execute_child(workflow, argument, **kwargs):
+        if workflow is workflows.TransformReferencesWorkflow.run:
+            assert argument.model_dump() == {
+                'user_id': 'admin',
+                'transformed_entries_path': str(mapping_paths[0]),
+            }
+            events.append('references')
+            return None
         assert workflow is workflows.TransformUploadWorkflow.run
         assert argument.entries == [
             entry for entry in found if entry.upload_id == argument.target_upload_id
@@ -185,7 +191,48 @@ def test_parent_reports_child_results_and_cleans_artifacts(
         'find_v1_entries',
         *upload_ids,
         'write_transformed_entries',
+        *(['references'] if upload_ids else []),
         'write_report',
         'cleanup',
     ]
     assert not mapping_paths[0].exists()
+
+
+def test_parent_cleans_artifacts_when_reference_child_fails(
+    action_context, monkeypatch
+):
+    entry = MigrationEntry(
+        entry_id='target',
+        upload_id='upload',
+        mainfile='target.archive.json',
+        mainfile_os_path='/staging/upload/raw/target.archive.json',
+        entry_data_m_def='example.v1.Schema',
+    )
+    path = '/actions/migration/artifacts/transformed_entries.json'
+    execute_activity = AsyncMock(side_effect=[None, [entry], path, None])
+    monkeypatch.setattr(workflows.workflow, 'execute_activity', execute_activity)
+    monkeypatch.setattr(
+        workflows.workflow,
+        'execute_child_workflow',
+        AsyncMock(
+            side_effect=[
+                TransformUploadResult(transformed=[entry]),
+                RuntimeError('Reference child failed'),
+            ]
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match='Reference child failed'):
+        asyncio.run(
+            workflows.MigrateBaseSectionsWorkflow().run(
+                MigrationActionInput(user_id='admin', upload_id='report-upload')
+            )
+        )
+
+    assert [call.args[0] for call in execute_activity.await_args_list] == [
+        activities.validate_input,
+        activities.find_v1_entries,
+        activities.write_transformed_entries,
+        activities.cleanup,
+    ]
+    assert execute_activity.await_args.args == (activities.cleanup, [path])
