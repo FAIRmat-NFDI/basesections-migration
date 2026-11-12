@@ -18,6 +18,7 @@ from basesection_migration.actions.models import (
     MigrationActionInput,
     MigrationEntry,
     ReportInput,
+    TransformEntryResult,
 )
 from basesection_migration.actions.utils import get_staging_upload_files
 from basesection_migration.scripts.migrate import migrate_input_archive
@@ -149,15 +150,23 @@ def find_referencing_entries(
 
 
 @activity.defn
-def transform_entry(data: MigrationEntry) -> bool:
-    """Transform a resolved mainfile, returning whether it was migrated."""
+def transform_entry(data: MigrationEntry) -> TransformEntryResult:
+    """Transform a mainfile and return its outcome with the original ``data.m_def``."""
 
-    # TODO: Populate data.entry_data_m_def of the migration entries when their
-    # archive mainfiles are opened. This information will be required for the
-    # activity that updates the reference paths in other entries that point
-    # to migration entries.
+    try:
+        transformed, entry_data_m_def = migrate_input_archive(data.mainfile_os_path)
+        data.entry_data_m_def = entry_data_m_def
+        if transformed:
+            status, reason = ('transformed', None)
+        else:
+            status, reason = (
+                'skipped',
+                'Archive is ineligible or already has a v1 backup',
+            )
+    except Exception as exc:
+        status, reason = ('failed', str(exc))
 
-    return migrate_input_archive(data.mainfile_os_path)
+    return TransformEntryResult(entry_ref=data, status=status, reason=reason)
 
 
 @activity.defn

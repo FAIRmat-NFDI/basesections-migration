@@ -13,7 +13,9 @@ class EntryRef(BaseModel):
 
 
 class MigrationEntry(EntryRef):
-    entry_data_m_def: str | None = None
+    entry_data_m_def: str | None = Field(
+        default=None, description='Original, pre-migration data.m_def of the entry.'
+    )
 
 
 class MigrationActionInput(BaseModel):
@@ -60,7 +62,6 @@ class TransformUploadInput(BaseModel):
 
 class TransformEntryResult(BaseModel):
     entry_ref: MigrationEntry
-    mainfile: str | None = None
     status: Literal['transformed', 'skipped', 'failed']
     reason: str | None = None
 
