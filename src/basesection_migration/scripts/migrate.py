@@ -117,40 +117,52 @@ def _replace_with_backup(
     return True
 
 
-def migrate_input_archive(path: str | Path) -> bool:
+def migrate_input_archive(path: str | Path) -> tuple[bool, str | None]:
     """Migrate one JSON/YAML input archive in place, keeping an exact v1 backup.
 
-    Return ``True`` when migrated and ``False`` for an ineligible archive or one
-    with an existing v1 backup. Malformed archives and failed transformations raise
-    an error before altering the source. Run with v1 definitions available; the
-    updated archive should be parsed only after the v2 upgrade.
+    Returns:
+        - bool: ``True`` when migrated and ``False`` for an ineligible
+        archive or one with an existing v1 backup. Malformed archives and failed
+        transformations raise an error before altering the source. Run with v1
+        definitions available; the updated archive should be parsed only after the v2
+        upgrade.
+        - str | None: Original, pre-migration ``data.m_def``, or ``None`` when
+        skipped before parsing the archive.
     """
+    entry_data_m_def = None
+
     input_path = Path(path)
     if input_path.name.endswith('archive.json'):
         format_suffix = '.json'
     elif input_path.name.endswith('archive.yaml'):
         format_suffix = '.yaml'
     else:
-        return False
+        return False, entry_data_m_def
 
     original_bytes = input_path.read_bytes()
     backup_path = input_path.with_name(
         f'{input_path.name.removesuffix(format_suffix)}.v1{format_suffix}'
     )
     if backup_path.exists():
-        return False
+        return False, entry_data_m_def
 
     try:
         if format_suffix == '.json':
             source_archive = json.loads(original_bytes)
         else:
             source_archive = yaml.safe_load(original_bytes)
+        if not isinstance(source_archive, dict):
+            raise ValueError(f'Archive root must be a mapping: {input_path}')
     except (json.JSONDecodeError, yaml.YAMLError) as e:
         raise ValueError(f'Cannot parse archive {input_path}') from e
-    if not isinstance(source_archive, dict):
-        raise ValueError(f'Archive root must be a mapping: {input_path}')
+
+    source_data = source_archive.get('data')
+    entry_data_m_def = (
+        source_data.get('m_def') if isinstance(source_data, dict) else None
+    )
+
     if not _transform_archive(source_archive):
-        return False
+        return False, entry_data_m_def
 
     if format_suffix == '.json':
         migrated_bytes = json.dumps(source_archive).encode('utf-8')
@@ -158,4 +170,8 @@ def migrate_input_archive(path: str | Path) -> bool:
         migrated_bytes = yaml.safe_dump(
             source_archive, sort_keys=False, allow_unicode=True
         ).encode('utf-8')
-    return _replace_with_backup(input_path, backup_path, original_bytes, migrated_bytes)
+
+    transformed = _replace_with_backup(
+        input_path, backup_path, original_bytes, migrated_bytes
+    )
+    return transformed, entry_data_m_def
