@@ -119,6 +119,17 @@ class MigrateBaseSectionsWorkflow:
             skipped.extend(result.skipped)
             failed.extend(result.failed)
 
+        transformed_entries_path = await workflow.execute_activity(
+            write_transformed_entries,
+            {
+                entry.entry_id: entry.entry_data_m_def
+                for entry in transformed
+                if entry.entry_data_m_def is not None
+            },
+            start_to_close_timeout=timedelta(minutes=5),
+            retry_policy=NO_RETRY,
+        )
+
         report_path = await workflow.execute_activity(
             write_report,
             ReportInput(
