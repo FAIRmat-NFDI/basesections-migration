@@ -112,8 +112,9 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 def find_referencing_entries(
     data: FindReferencingEntriesInput,
 ) -> list[EntryRef]:
-    """Find unpublished entries that contain reference to the migration entries."""
-    target_ids = list(dict.fromkeys(data.target_entry_ids))
+    """Load transformed target IDs from the mapping and find unpublished sources."""
+    with Path(data.transformed_entries_path).open(encoding='utf-8') as file:
+        target_ids = list(json.load(file))
     if not target_ids:
         return []
 
@@ -188,6 +189,7 @@ def write_transformed_entries(data: dict[str, str]) -> str:
 def fix_reference_paths(data: FixReferencePathsInput) -> None:
     """Fix references in one source entry after all target transformations finish.
 
+    ``source_entry`` includes the resolved mainfile path for reference repair.
     Intended to run once per source entry. ``transformed_entries_path`` points
     to a JSON ``dict[str, str]`` mapping transformed entry IDs to their original,
     pre-migration ``data.m_def`` values.
