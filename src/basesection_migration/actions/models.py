@@ -45,9 +45,9 @@ class FixReferencePathsInput(BaseModel):
     source_entry_id: str = Field(
         description='ID of the source entry whose reference paths need repair.'
     )
-    target_entry_m_defs_path: str = Field(
-        description='Path to a JSON mapping from target entry IDs to their original, '
-        'pre-migration data.m_def values.'
+    transformed_entries_path: str = Field(
+        description='Path to a JSON mapping from transformed entry IDs to their '
+        'original, pre-migration data.m_def values.'
     )
 
 

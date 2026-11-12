@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from elasticsearch.dsl import Q
+from nomad.actions.manager import action_instance_artifacts_dir
 from nomad.app.v1.models.models import MetadataRequired
 from nomad.config import config
 from nomad.search import search_iterator
@@ -170,11 +171,25 @@ def transform_entry(data: MigrationEntry) -> TransformEntryResult:
 
 
 @activity.defn
+def write_transformed_entries(data: dict[str, str]) -> str:
+    """Save transformed entries as an action artifact.
+
+    The mapping contains entry IDs returned by child workflows and their original,
+    pre-migration ``data.m_def`` values.
+    """
+    artifact_dir = Path(action_instance_artifacts_dir(activity.info().workflow_id))
+    output_path = artifact_dir / 'transformed_entries.json'
+    with output_path.open('w', encoding='utf-8') as file:
+        json.dump(data, file, indent=2, ensure_ascii=False)
+    return output_path.as_posix()
+
+
+@activity.defn
 def fix_reference_paths(data: FixReferencePathsInput) -> None:
     """Fix references in one source entry after all target transformations finish.
 
-    Intended to run once per source entry. ``target_entry_m_defs_path`` points
-    to a JSON ``dict[str, str]`` mapping target entry IDs to their original,
+    Intended to run once per source entry. ``transformed_entries_path`` points
+    to a JSON ``dict[str, str]`` mapping transformed entry IDs to their original,
     pre-migration ``data.m_def`` values.
     """
     raise NotImplementedError('Reference path repair is not implemented yet.')

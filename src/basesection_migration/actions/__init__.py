@@ -19,6 +19,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
             transform_entry,
             validate_input,
             write_report,
+            write_transformed_entries,
         )
         from basesection_migration.actions.workflows import (
             MigrateBaseSectionsWorkflow,
@@ -34,6 +35,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
                 find_v1_entries,
                 find_referencing_entries,
                 transform_entry,
+                write_transformed_entries,
                 fix_reference_paths,
                 write_report,
             ],
