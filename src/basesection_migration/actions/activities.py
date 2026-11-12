@@ -185,16 +185,27 @@ def write_transformed_entries(data: dict[str, str]) -> str:
     return output_path.as_posix()
 
 
+def _fix_reference_paths_for_entry(
+    source_entry: EntryRef, transformed_entries_path: str
+) -> None:
+    """Placeholder for repairing references in one source archive."""
+    raise NotImplementedError('Reference path repair is not implemented yet.')
+
+
 @activity.defn
 def fix_reference_paths(data: FixReferencePathsInput) -> None:
-    """Fix references in one source entry after all target transformations finish.
+    """Fix references in all source entries after target transformations finish.
 
-    ``source_entry`` includes the resolved mainfile path for reference repair.
-    Intended to run once per source entry. ``transformed_entries_path`` points
-    to a JSON ``dict[str, str]`` mapping transformed entry IDs to their original,
+    ``source_entries`` includes resolved mainfile paths. Process entries in order,
+    continuing after individual failures. ``transformed_entries_path`` points to a
+    JSON ``dict[str, str]`` mapping transformed entry IDs to their original,
     pre-migration ``data.m_def`` values.
     """
-    raise NotImplementedError('Reference path repair is not implemented yet.')
+    for entry in data.source_entries:
+        try:
+            _fix_reference_paths_for_entry(entry, data.transformed_entries_path)
+        except Exception:
+            pass
 
 
 @activity.defn

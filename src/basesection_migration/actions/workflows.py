@@ -76,7 +76,7 @@ class TransformUploadWorkflow:
 
 @workflow.defn
 class TransformReferencesWorkflow:
-    """Find source entries and repair their references sequentially."""
+    """Find source entries and repair their references in one activity."""
 
     @workflow.run
     async def run(self, data: TransformReferencesInput) -> None:
@@ -90,19 +90,16 @@ class TransformReferencesWorkflow:
             retry_policy=NO_RETRY,
         )
 
-        for entry in source_entries:
-            try:
-                await workflow.execute_activity(
-                    fix_reference_paths,
-                    FixReferencePathsInput(
-                        source_entry=entry,
-                        transformed_entries_path=data.transformed_entries_path,
-                    ),
-                    start_to_close_timeout=timedelta(hours=2),
-                    retry_policy=NO_RETRY,
-                )
-            except Exception:
-                pass
+        if source_entries:
+            await workflow.execute_activity(
+                fix_reference_paths,
+                FixReferencePathsInput(
+                    source_entries=source_entries,
+                    transformed_entries_path=data.transformed_entries_path,
+                ),
+                start_to_close_timeout=timedelta(hours=2),
+                retry_policy=NO_RETRY,
+            )
 
 
 @workflow.defn

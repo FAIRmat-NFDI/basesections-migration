@@ -42,8 +42,8 @@ class FindReferencingEntriesInput(BaseModel):
 
 
 class FixReferencePathsInput(BaseModel):
-    source_entry: EntryRef = Field(
-        description='Source entry and resolved mainfile path used for reference repair.'
+    source_entries: list[EntryRef] = Field(
+        description='Source entries with resolved mainfile paths for reference repair.'
     )
     transformed_entries_path: str = Field(
         description='Path to a JSON mapping from transformed entry IDs to their '
