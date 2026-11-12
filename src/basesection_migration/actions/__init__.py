@@ -15,6 +15,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
         from basesection_migration.actions.activities import (
             find_referencing_entries,
             find_v1_entries,
+            fix_reference_paths,
             transform_entry,
             validate_input,
             write_report,
@@ -33,6 +34,7 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
                 find_v1_entries,
                 find_referencing_entries,
                 transform_entry,
+                fix_reference_paths,
                 write_report,
             ],
         )

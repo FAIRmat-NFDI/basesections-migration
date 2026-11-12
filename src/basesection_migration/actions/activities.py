@@ -14,6 +14,7 @@ from basesection_migration.actions.models import (
     EntryRef,
     FindEntriesInput,
     FindReferencingEntriesInput,
+    FixReferencePathsInput,
     MigrationActionInput,
     MigrationEntry,
     ReportInput,
@@ -157,6 +158,17 @@ def transform_entry(data: MigrationEntry) -> bool:
     # to migration entries.
 
     return migrate_input_archive(data.mainfile_os_path)
+
+
+@activity.defn
+def fix_reference_paths(data: FixReferencePathsInput) -> None:
+    """Fix references in one source entry after all target transformations finish.
+
+    Intended to run once per source entry. ``target_entry_m_defs_path`` points
+    to a JSON ``dict[str, str]`` mapping target entry IDs to their original,
+    pre-migration ``data.m_def`` values.
+    """
+    raise NotImplementedError('Reference path repair is not implemented yet.')
 
 
 @activity.defn
