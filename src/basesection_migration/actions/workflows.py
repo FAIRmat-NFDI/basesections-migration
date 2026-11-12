@@ -8,7 +8,9 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from basesection_migration.actions.activities import (
         cleanup,
+        find_referencing_entries,
         find_v1_entries,
+        fix_reference_paths,
         transform_entry,
         validate_input,
         write_report,
@@ -16,11 +18,14 @@ with workflow.unsafe.imports_passed_through():
     )
     from basesection_migration.actions.models import (
         FindEntriesInput,
+        FindReferencingEntriesInput,
+        FixReferencePathsInput,
         MigrationActionInput,
         MigrationActionOutput,
         MigrationEntry,
         ReportInput,
         TransformEntryResult,
+        TransformReferencesInput,
         TransformUploadInput,
         TransformUploadResult,
     )
@@ -70,8 +75,39 @@ class TransformUploadWorkflow:
 
 
 @workflow.defn
+class TransformReferencesWorkflow:
+    """Find source entries and repair their references sequentially."""
+
+    @workflow.run
+    async def run(self, data: TransformReferencesInput) -> None:
+        source_entries = await workflow.execute_activity(
+            find_referencing_entries,
+            FindReferencingEntriesInput(
+                user_id=data.user_id,
+                transformed_entries_path=data.transformed_entries_path,
+            ),
+            start_to_close_timeout=timedelta(hours=2),
+            retry_policy=NO_RETRY,
+        )
+
+        for entry in source_entries:
+            try:
+                await workflow.execute_activity(
+                    fix_reference_paths,
+                    FixReferencePathsInput(
+                        source_entry=entry,
+                        transformed_entries_path=data.transformed_entries_path,
+                    ),
+                    start_to_close_timeout=timedelta(hours=2),
+                    retry_policy=NO_RETRY,
+                )
+            except Exception:
+                pass
+
+
+@workflow.defn
 class MigrateBaseSectionsWorkflow:
-    """Find staging entries, migrate them by upload, and save a run report."""
+    """Migrate staging entries, repair references, and save a run report."""
 
     @workflow.run
     async def run(self, data: MigrationActionInput) -> MigrationActionOutput:
@@ -113,18 +149,31 @@ class MigrateBaseSectionsWorkflow:
             skipped.extend(result.skipped)
             failed.extend(result.failed)
 
+        transformed_entry_m_defs = {
+            entry.entry_id: entry.entry_data_m_def
+            for entry in transformed
+            if entry.entry_data_m_def is not None
+        }
         transformed_entries_path = await workflow.execute_activity(
             write_transformed_entries,
-            {
-                entry.entry_id: entry.entry_data_m_def
-                for entry in transformed
-                if entry.entry_data_m_def is not None
-            },
+            transformed_entry_m_defs,
             start_to_close_timeout=timedelta(minutes=5),
             retry_policy=NO_RETRY,
         )
 
         try:
+            if transformed_entry_m_defs:
+                await workflow.execute_child_workflow(
+                    TransformReferencesWorkflow.run,
+                    TransformReferencesInput(
+                        user_id=data.user_id,
+                        transformed_entries_path=transformed_entries_path,
+                    ),
+                    id=f'{workflow.info().workflow_id}-transform-references',
+                    parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
+                    retry_policy=NO_RETRY,
+                )
+
             report_path = await workflow.execute_activity(
                 write_report,
                 ReportInput(

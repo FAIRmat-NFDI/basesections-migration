@@ -35,20 +35,24 @@ class FindEntriesInput(BaseModel):
 
 class FindReferencingEntriesInput(BaseModel):
     user_id: str
-    target_entry_ids: list[str] = Field(
-        description='IDs of target entries used to find unpublished source entries '
-        'that reference any of them.'
+    transformed_entries_path: str = Field(
+        description='Path to the JSON mapping whose entry IDs are used to find '
+        'unpublished source entries that reference any of them.'
     )
 
 
 class FixReferencePathsInput(BaseModel):
-    source_entry_id: str = Field(
-        description='ID of the source entry whose reference paths need repair.'
+    source_entry: EntryRef = Field(
+        description='Source entry and resolved mainfile path used for reference repair.'
     )
     transformed_entries_path: str = Field(
         description='Path to a JSON mapping from transformed entry IDs to their '
         'original, pre-migration data.m_def values.'
     )
+
+
+class TransformReferencesInput(FindReferencingEntriesInput):
+    """Input for reference repair using the saved transformed entries mapping."""
 
 
 class TransformUploadInput(BaseModel):

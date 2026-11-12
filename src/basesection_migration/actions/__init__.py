@@ -24,13 +24,14 @@ class MigrateBaseSectionsActionEntryPoint(ActionEntryPoint):
         )
         from basesection_migration.actions.workflows import (
             MigrateBaseSectionsWorkflow,
+            TransformReferencesWorkflow,
             TransformUploadWorkflow,
         )
 
         return Action(
             task_queue=self.task_queue,
             workflow=MigrateBaseSectionsWorkflow,
-            child_workflows=[TransformUploadWorkflow],
+            child_workflows=[TransformUploadWorkflow, TransformReferencesWorkflow],
             activities=[
                 validate_input,
                 find_v1_entries,
