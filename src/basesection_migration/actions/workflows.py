@@ -8,10 +8,12 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from basesection_migration.actions.activities import (
+        cleanup,
         find_v1_entries,
         transform_entry,
         validate_input,
         write_report,
+        write_transformed_entries,
     )
     from basesection_migration.actions.models import (
         FindEntriesInput,
@@ -130,25 +132,33 @@ class MigrateBaseSectionsWorkflow:
             retry_policy=NO_RETRY,
         )
 
-        report_path = await workflow.execute_activity(
-            write_report,
-            ReportInput(
-                user_id=data.user_id,
-                upload_id=data.upload_id,
-                workflow_id=workflow.info().workflow_id,
-                started_at=workflow.info().start_time.isoformat(),
-                found=found_migration_entries,
+        try:
+            report_path = await workflow.execute_activity(
+                write_report,
+                ReportInput(
+                    user_id=data.user_id,
+                    upload_id=data.upload_id,
+                    workflow_id=workflow.info().workflow_id,
+                    started_at=workflow.info().start_time.isoformat(),
+                    found=found_migration_entries,
+                    transformed=transformed,
+                    skipped=skipped,
+                    failed=failed,
+                ),
+                start_to_close_timeout=timedelta(hours=2),
+                retry_policy=NO_RETRY,
+            )
+            return MigrationActionOutput(
+                found_count=len(found_migration_entries),
                 transformed=transformed,
-                skipped=skipped,
-                failed=failed,
-            ),
-            start_to_close_timeout=timedelta(hours=2),
-            retry_policy=NO_RETRY,
-        )
-        return MigrationActionOutput(
-            found_count=len(found_migration_entries),
-            transformed=transformed,
-            skipped_count=len(skipped),
-            failed_count=len(failed),
-            report_path=report_path,
-        )
+                skipped_count=len(skipped),
+                failed_count=len(failed),
+                report_path=report_path,
+            )
+        finally:
+            await workflow.execute_activity(
+                cleanup,
+                [transformed_entries_path],
+                start_to_close_timeout=timedelta(minutes=5),
+                retry_policy=NO_RETRY,
+            )
