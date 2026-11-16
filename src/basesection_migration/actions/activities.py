@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from elasticsearch.dsl import Q
+from nomad.actions.manager import action_instance_artifacts_dir
 from nomad.app.v1.models.models import MetadataRequired
 from nomad.config import config
 from nomad.search import search_iterator
@@ -14,9 +15,11 @@ from basesection_migration.actions.models import (
     EntryRef,
     FindEntriesInput,
     FindReferencingEntriesInput,
+    FixReferencePathsInput,
     MigrationActionInput,
     MigrationEntry,
     ReportInput,
+    TransformEntryResult,
 )
 from basesection_migration.actions.utils import get_staging_upload_files
 from basesection_migration.scripts.migrate import migrate_input_archive
@@ -109,8 +112,9 @@ def find_v1_entries(data: FindEntriesInput) -> list[MigrationEntry]:
 def find_referencing_entries(
     data: FindReferencingEntriesInput,
 ) -> list[EntryRef]:
-    """Find unpublished entries that contain reference to the migration entries."""
-    target_ids = list(dict.fromkeys(data.target_entry_ids))
+    """Load transformed target IDs from the mapping and find unpublished sources."""
+    with Path(data.transformed_entries_path).open(encoding='utf-8') as file:
+        target_ids = list(json.load(file))
     if not target_ids:
         return []
 
@@ -148,15 +152,67 @@ def find_referencing_entries(
 
 
 @activity.defn
-def transform_entry(data: MigrationEntry) -> bool:
-    """Transform a resolved mainfile, returning whether it was migrated."""
+def transform_entry(data: MigrationEntry) -> TransformEntryResult:
+    """Transform a mainfile and return its outcome with the original ``data.m_def``."""
 
-    # TODO: Populate data.entry_data_m_def of the migration entries when their
-    # archive mainfiles are opened. This information will be required for the
-    # activity that updates the reference paths in other entries that point
-    # to migration entries.
+    try:
+        transformed, entry_data_m_def = migrate_input_archive(data.mainfile_os_path)
+        data.entry_data_m_def = entry_data_m_def
+        if transformed:
+            status, reason = ('transformed', None)
+        else:
+            status, reason = (
+                'skipped',
+                'Archive is ineligible or already has a v1 backup',
+            )
+    except Exception as exc:
+        status, reason = ('failed', str(exc))
 
-    return migrate_input_archive(data.mainfile_os_path)
+    return TransformEntryResult(entry_ref=data, status=status, reason=reason)
+
+
+@activity.defn
+def write_transformed_entries(data: dict[str, str]) -> str:
+    """Save transformed entries as an action artifact.
+
+    The mapping contains entry IDs returned by child workflows and their original,
+    pre-migration ``data.m_def`` values.
+    """
+    artifact_dir = Path(action_instance_artifacts_dir(activity.info().workflow_id))
+    output_path = artifact_dir / 'transformed_entries.json'
+    with output_path.open('w', encoding='utf-8') as file:
+        json.dump(data, file, indent=2, ensure_ascii=False)
+    return output_path.as_posix()
+
+
+def _fix_reference_paths_for_entry(
+    source_entry: EntryRef, transformed_entries_path: str
+) -> None:
+    """Placeholder for repairing references in one source archive."""
+    raise NotImplementedError('Reference path repair is not implemented yet.')
+
+
+@activity.defn
+def fix_reference_paths(data: FixReferencePathsInput) -> None:
+    """Fix references in all source entries after target transformations finish.
+
+    ``source_entries`` includes resolved mainfile paths. Process entries in order,
+    continuing after individual failures. ``transformed_entries_path`` points to a
+    JSON ``dict[str, str]`` mapping transformed entry IDs to their original,
+    pre-migration ``data.m_def`` values.
+    """
+    for entry in data.source_entries:
+        try:
+            _fix_reference_paths_for_entry(entry, data.transformed_entries_path)
+        except Exception:
+            pass
+
+
+@activity.defn
+def cleanup(paths: list[str]) -> None:
+    """Remove temporary artifact files, ignoring those that are already missing."""
+    for path in paths:
+        Path(path).unlink(missing_ok=True)
 
 
 @activity.defn

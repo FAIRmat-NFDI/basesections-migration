@@ -13,7 +13,9 @@ class EntryRef(BaseModel):
 
 
 class MigrationEntry(EntryRef):
-    entry_data_m_def: str | None = None
+    entry_data_m_def: str | None = Field(
+        default=None, description='Original, pre-migration data.m_def of the entry.'
+    )
 
 
 class MigrationActionInput(BaseModel):
@@ -33,7 +35,24 @@ class FindEntriesInput(BaseModel):
 
 class FindReferencingEntriesInput(BaseModel):
     user_id: str
-    target_entry_ids: list[str]
+    transformed_entries_path: str = Field(
+        description='Path to the JSON mapping whose entry IDs are used to find '
+        'unpublished source entries that reference any of them.'
+    )
+
+
+class FixReferencePathsInput(BaseModel):
+    source_entries: list[EntryRef] = Field(
+        description='Source entries with resolved mainfile paths for reference repair.'
+    )
+    transformed_entries_path: str = Field(
+        description='Path to a JSON mapping from transformed entry IDs to their '
+        'original, pre-migration data.m_def values.'
+    )
+
+
+class TransformReferencesInput(FindReferencingEntriesInput):
+    """Input for reference repair using the saved transformed entries mapping."""
 
 
 class TransformUploadInput(BaseModel):
@@ -47,7 +66,6 @@ class TransformUploadInput(BaseModel):
 
 class TransformEntryResult(BaseModel):
     entry_ref: MigrationEntry
-    mainfile: str | None = None
     status: Literal['transformed', 'skipped', 'failed']
     reason: str | None = None
 
