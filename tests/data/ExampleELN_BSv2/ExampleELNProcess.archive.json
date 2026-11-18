@@ -1,0 +1,42 @@
+{
+    "data": {
+        "m_def": "nomad.datamodel.metainfo.basesections.v2.Process",
+        "name": "ExampleELNProcess",
+        "datetime": "2026-09-14T08:27:42.047414+00:00",
+        "lab_id": "ELNProcess0837650318501398518",
+        "description": "<p>fhweliygeflequfliequfhlqeiu <span style=\"background-color: #fbeeb8;\">jwehfvkewhf</span> iywegkyfegk</p>",
+        "location": "Berlin",
+        "end_time": "2026-09-14T08:35:00+00:00",
+        "tags": [
+            "tag_1",
+            "tag_2"
+        ],
+        "steps": [
+            {
+                "name": "ExampleStep_1",
+                "start_time": "2026-09-14T08:27:00+00:00",
+                "description": "<p>lwdhfblwwleiuvj hefbleghle</p>",
+                "duration": 20
+            }
+        ],
+        "instruments": [
+            {
+                "name": "ELNInstrument_example",
+                "reference": "../uploads/kmnIYr2oRguMLblC7B_Hww/archive/kFdFzdogLSpYr42rTE-0HQeieBsB#/data",
+                "lab_id": "ELNInstrument64087564875638536"
+            }
+        ],
+        "samples": [
+            {
+                "reference": "../uploads/kmnIYr2oRguMLblC7B_Hww/archive/eBLjiWocOyF1T284ogSDBfnEmy-G#data"
+            }
+        ],
+        "process_identifiers": {
+            "institute": "HU Berlin",
+            "owner": "LeGi",
+            "datetime": "2026-09-14T08:27:42.046470+00:00",
+            "short_name": "ExampleELNProcess",
+            "lab_id": "HU Berlin_LeGi_20260914_ExampleELNProcess"
+        }
+    }
+}

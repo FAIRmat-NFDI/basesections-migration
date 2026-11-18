@@ -62,8 +62,8 @@ def create_transformer(path_prefix: pathlib.Path) -> Transformer:
         )
         rules_json = json.loads(rule_path.read_text())
         rules_json['rules']['delete_m_def_id'] = {
-            'source': 'm_def_id',
             'target': 'm_def_id',
+            'action': 'delete'
         }
         rules[f'{section}_transformation'] = Rules(**rules_json)
 

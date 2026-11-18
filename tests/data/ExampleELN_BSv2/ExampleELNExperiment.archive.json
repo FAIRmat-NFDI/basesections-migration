@@ -1,0 +1,30 @@
+{
+    "data": {
+        "m_def": "nomad.datamodel.metainfo.basesections.v2.Activity",
+        "name": "ExampleELNExperiment",
+        "datetime": "2026-09-14T09:46:25.830678+00:00",
+        "lab_id": "ELNExperiment46453414",
+        "description": "<p>liwulfuwehf;iu jufwlefnweljnf kgfvehjgfvwekgh&nbsp;</p>",
+        "location": "Berlin",
+        "tags": [
+            "tag_6",
+            "tag_67676"
+        ],
+        "sub_activities": [
+            {
+                "name": "ELNMeasurement4587658736",
+                "start_time": "2026-09-14T09:02:54.900138+00:00",
+                "activity": "../uploads/kmnIYr2oRguMLblC7B_Hww/archive/HXsqK7K5fA3CDRazSjEKaTxEGHIk#/data",
+                "reference_lab_id": "ELNMeasurement4587658736",
+                "comment": "<p>Example Experiment Step</p>"
+            }
+        ],
+        "experiment_identifiers": {
+            "institute": "HU Berlin",
+            "owner": "LeGi",
+            "datetime": "2026-09-14T09:46:25.829012+00:00",
+            "short_name": "ExampleELNExperiment",
+            "lab_id": "HU Berlin_LeGi_20260914_ExampleELNExperiment"
+        }
+    }
+}
