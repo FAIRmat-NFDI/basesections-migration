@@ -17,8 +17,8 @@
         "monoisotopic_mass": 34.015,
         "inchi": "1S/H2O2/c1-2/h1-2H",
         "inchi_key": "MHAJPDPJQMAIIY-UHFFFAOYSA-N",
-        "smile": "OO",
-        "canonical_smile": "OO",
+        "smiles": "OO",
+        "canonical_smiles": "OO",
         "cas_number": "784",
         "sub_systems": [
             {
