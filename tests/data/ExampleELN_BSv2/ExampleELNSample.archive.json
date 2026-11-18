@@ -1,0 +1,71 @@
+{
+    "data": {
+        "m_def": "nomad.datamodel.metainfo.basesections.v2.System",
+        "name": "ExampleELNSample",
+        "datetime": "2026-09-14T08:35:41.374103+00:00",
+        "lab_id": "ELNSample8753985723875",
+        "description": "<p style=\"text-align: center;\">woieoiughwe iwuhguf weifuweiuew ewfwegf</p>",
+        "tags": [
+            "tag_45",
+            "tag_9"
+        ],
+        "elemental_composition": [
+            {
+                "element": "Na",
+                "atomic_fraction": 0.5,
+                "mass_fraction": 0.3933925401014177
+            },
+            {
+                "element": "Cl",
+                "atomic_fraction": 0.5,
+                "mass_fraction": 0.6066074598985822
+            }
+        ],
+        "sub_systems": [
+            {
+                "name": "ExampleComponent",
+                "subsystem_properties": {
+                    "mass": 0.000025,
+                    "mass_fraction": 0.25
+                }
+            },
+            {
+                "name": "ExamplePureSubstanceComponent",
+                "substance_name": "sodium chloride",
+                "nested_system": {
+                    "m_def": "nomad.datamodel.metainfo.basesections.v2.PureSubstance",
+                    "name": "sodium chloride",
+                    "iupac_name": "sodium chloride",
+                    "molecular_formula": "NaCl",
+                    "molecular_mass": 58.44,
+                    "molar_mass": 58.5,
+                    "monoisotopic_mass": 58.5,
+                    "inchi": "1S/ClH.Na/h1H;/q;+1/p-1",
+                    "inchi_key": "FAPWRFPIFSIZLT-UHFFFAOYSA-M",
+                    "smiles": "[Na+].[Cl-]",
+                    "canonical_smiles": "[Na+].[Cl-]",
+                    "cas_number": "5234"
+                },
+                "subsystem_properties": {
+                    "mass": 0.000025,
+                    "mass_fraction": 0.25
+                }
+            },
+            {
+                "name": "ExampleSystemComponent",
+                "system": "../uploads/kmnIYr2oRguMLblC7B_Hww/archive/jeFIM4VQ9XsV5Xmz0I5-FVdv7Ogc#/data",
+                "subsystem_properties": {
+                    "mass": 0.00005,
+                    "mass_fraction": 0.5
+                }
+            }
+        ],
+        "sample_identifiers": {
+            "institute": "HU Berlin",
+            "owner": "Lev Ginzburg",
+            "datetime": "2026-01-01T09:40:00+00:00",
+            "short_name": "ExampleSample",
+            "lab_id": "HU Berlin_Lev-Ginzburg_20260101_ExampleSample"
+        }
+    }
+}
