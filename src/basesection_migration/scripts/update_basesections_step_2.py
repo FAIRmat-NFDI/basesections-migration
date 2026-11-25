@@ -1,4 +1,8 @@
-"""transform renamed entries into the new schema, keep the old version as well"""
+"""Transform renamed v1 BaseSection entries into the v2 schema.
+
+The script keeps the original v1 files and writes transformed copies with v2
+suffixes for JSON and YAML archive or Metainfo data.
+"""
 
 import importlib
 import json
@@ -45,42 +49,48 @@ SUFFIX_V2 = [
 ]
 
 
-def create_transformer(path_prefix: pathlib.Path) -> Transformer:
-    """Create a transformer configured with all base-section migration rules.
+def create_transformer(path_prefix: pathlib.Path) -> tuple[Transformer, list[str]]:
+    """Create a transformer for the available BaseSection migration rules.
+
+    Args:
+        path_prefix: Repository or package root containing the migration scripts.
 
     Returns:
-        A NOMAD ``Transformer`` containing one mapping per section in
-        ``BASE_SECTIONS_V1_LIST``. Expected relative file path for each section is
-        ``transformation_rules/rules_<Section Name>.json``
+        A tuple with a configured NOMAD ``Transformer`` and the names of the
+        v1 BaseSection classes for which rule files were found.
     """
+
+    directory = path_prefix / 'src/basesection_migration/scripts/transformation_rules'
+    rules_files = [
+        path for path in directory.glob("rules_*.json")
+        if path.is_file()
+    ]
+    base_sections_v1_list = [path.name[6:-5] for path in rules_files]
+
     rules = {}
-    for section in BASE_SECTIONS_V1_LIST:
-        rule_path = (
-            path_prefix
-            / 'src/basesection_migration/scripts/'
-            / f'transformation_rules/rules_{section}.json'
-        )
+    for rule_path, section in zip(rules_files, base_sections_v1_list):
         rules_json = json.loads(rule_path.read_text())
         rules_json['rules']['delete_m_def_id'] = {
-            'source': 'm_def_id',
             'target': 'm_def_id',
+            'action': 'delete'
         }
         rules[f'{section}_transformation'] = Rules(**rules_json)
 
     transformer = Transformer(rules)
-    return transformer
+    return transformer, base_sections_v1_list
 
 
 def get_schema_from_source_data(source_data: dict) -> tuple[str | None, dict | None]:
-    """Load the class and JSON schema identified by ``m_def`` key of a source data
-    dictionary.
+    """Resolve a source section's ``m_def`` and generate its JSON schema.
 
     Args:
-        source_data: ``data`` section of a NOMAD ``.archive.json`` file.
+        source_data: Data mapping from a NOMAD archive.
 
     Returns:
-        A tuple containing the ``m_def`` value and its loaded JSON schema.
-        If ``m_def`` is missing or cannot be imported, the schema is empty.
+        A tuple containing the resolved ``m_def`` string and its generated JSON
+        schema. If ``m_def`` is missing or cannot be imported, the first or
+        second value is ``None`` as appropriate and an explanatory message is
+        printed.
     """
     data_m_def: str | None = source_data.get('m_def', None)
 
@@ -113,25 +123,25 @@ def get_schema_from_source_data(source_data: dict) -> tuple[str | None, dict | N
 def validate_and_get_subdict_refs(  # noqa: PLR0915
     source_data: dict, source_data_schema: dict
 ) -> list[tuple[tuple[str | int, ...], str | None]]:
-    """Validate ``source_data`` by ``source_data_schema``, then walk both
-    and generate paths to nested subsections and their ``m_def``.
+    """Validate source data and collect paths and definitions for nested sections.
 
-    If multiple different ``m_def`` are allowed per a nested subsection by schema,
-    check if ``m_def`` is provided by data and is allowed by schema. Use the data
-    ``m_def`` if the check is passed, otherwise fall back to the last ``m_def``
-    allowed by schema (should be the most general one).
+    Schema compositions may expose multiple allowed ``m_def`` values. When the
+    section data provides an allowed value, that value is retained; otherwise,
+    the last allowed normalized reference is used.
 
     Args:
-        source_data: ``data`` section of a NOMAD ``.archive.json`` file.
-        source_data_schema: JSON schema corresponding to the ``source_data``.
+        source_data: Data mapping from a NOMAD archive.
+        source_data_schema: JSON schema describing ``source_data``.
 
     Returns:
-        a list of records, every record corresponds to a subsection of the
-        ``source_data`` walked depth-first. Every record is a tuple, where the first
-        element is a path to subsection and the second is an ``m_def`` string
-        corresponding to the subsection. The path is a tuple with elements that are
-        either strings (key for the dict) or integers (indices for the lists) in order
-        from root to subsection.
+        A depth-first list of subsection records. Each record contains a tuple
+        locating the subsection from the root and the subsection's normalized
+        ``m_def`` string, if one can be determined. Path elements are mapping keys
+        or list indices.
+
+    Raises:
+        jsonschema.exceptions.ValidationError: If ``source_data`` does not conform
+            to ``source_data_schema``.
     """
 
     from jsonschema.validators import validator_for
@@ -149,7 +159,14 @@ def validate_and_get_subdict_refs(  # noqa: PLR0915
     subdict_refs: list[tuple[tuple[str | int, ...], str | None]] = []
 
     def schema_views(schema: dict):
-        """Yield a schema and the schemas reachable through refs/compositions."""
+        """Yield a schema and every schema reachable through refs or compositions.
+
+        Args:
+            schema: JSON schema or subschema to inspect.
+
+        Yields:
+            Resolved schema mappings from the input and its compositions.
+        """
         if '$ref' in schema:
             resolved_schema = resolver.lookup(schema['$ref']).contents
             yield from schema_views(resolved_schema)
@@ -160,11 +177,25 @@ def validate_and_get_subdict_refs(  # noqa: PLR0915
                 yield from schema_views(subschema)
 
     def normalize_ref(reference: str) -> str:
-        """Reduce a schema reference to its definition name."""
+        """Reduce a JSON schema reference to a normalized definition name.
+
+        Args:
+            reference: Schema reference string.
+
+        Returns:
+            The portion before ``@`` and after the final slash.
+        """
         return reference.split('@', 1)[0].rsplit('/', 1)[-1]
 
     def schema_refs(schema: dict) -> list[str]:
-        """Collect normalized references from a schema composition."""
+        """Collect normalized references from a schema or composition.
+
+        Args:
+            schema: JSON schema or subschema to inspect.
+
+        Returns:
+            Normalized references found directly or in allOf, anyOf, or oneOf.
+        """
         if '$ref' in schema:
             return [normalize_ref(schema['$ref'])]
         references = []
@@ -174,7 +205,15 @@ def validate_and_get_subdict_refs(  # noqa: PLR0915
         return references
 
     def schema_ref(schema: dict, data: dict | None = None) -> str | None:
-        """Choose the data-matching reference or the final available option."""
+        """Choose the data-matching schema reference or the final available one.
+
+        Args:
+            schema: JSON schema or subschema describing a subsection.
+            data: Subsection data used to match an allowed ``m_def``.
+
+        Returns:
+            The matching or fallback normalized reference, or ``None`` if none exists.
+        """
         references = schema_refs(schema)
         if not references:
             return None
@@ -185,14 +224,28 @@ def validate_and_get_subdict_refs(  # noqa: PLR0915
         return references[-1]
 
     def object_properties(schema: dict) -> dict:
-        """Collect object properties from all visible schema views."""
+        """Collect object properties from all visible schema views.
+
+        Args:
+            schema: JSON schema or subschema to inspect.
+
+        Returns:
+            A mapping of property names to their schemas.
+        """
         properties = {}
         for schema_view in schema_views(schema):
             properties.update(schema_view.get('properties', {}))
         return properties
 
     def array_items(schema: dict) -> dict | None:
-        """Return the schema describing items in an array, if present."""
+        """Find the schema describing items in an array.
+
+        Args:
+            schema: JSON schema or subschema to inspect.
+
+        Returns:
+            The first item schema found in the visible schema views, or ``None``.
+        """
         for schema_view in schema_views(schema):
             items = schema_view.get('items')
             if isinstance(items, dict):
@@ -200,7 +253,13 @@ def validate_and_get_subdict_refs(  # noqa: PLR0915
         return None
 
     def walk(data: dict | list, schema: dict, path: tuple[str | int, ...]) -> None:
-        """Recursively collect paths to nested dictionaries in source data."""
+        """Recursively append nested subsection locations and definitions.
+
+        Args:
+            data: Mapping or list currently being traversed.
+            schema: JSON schema for ``data``.
+            path: Keys and indices locating ``data`` from the source root.
+        """
         if isinstance(data, dict):
             properties = object_properties(schema)
             for key, value in data.items():
@@ -227,14 +286,14 @@ def validate_and_get_subdict_refs(  # noqa: PLR0915
 
 
 def find_mro(section_definition: str) -> list[type] | None:
-    """Find the class MRO for a section definition (``m_def``).
+    """Resolve the method resolution order for a section definition.
 
     Args:
         section_definition: Fully qualified Python class name from ``m_def``.
 
     Returns:
-        The class's method resolution order, or ``None`` if the class cannot
-        be imported or resolved.
+        The class's method resolution order, or ``None`` if the definition is not
+        importable or otherwise cannot be resolved.
     """
     module_name, separator, class_name = section_definition.rpartition('.')
     if separator:
@@ -247,19 +306,25 @@ def find_mro(section_definition: str) -> list[type] | None:
 
 
 def transform_section(
-    source_section: dict, section_definition: str, transformer: Transformer
+    source_section: dict,
+    section_definition: str,
+    transformer: Transformer,
+    base_sections_v1_list: list[str]
 ) -> dict:
-    """Apply all relevant base-section transformations to one archive section in
-    reverse-MRO order (first general, then specialized).
+    """Apply applicable v1 BaseSection rules to one archive section.
+
+    Rules are applied in reverse method resolution order, from the most general
+    inherited BaseSection to the most specific class.
 
     Args:
-        source_section: The section data to transform.
+        source_section: Mapping for the section to transform.
         section_definition: Fully qualified Python class name from ``m_def``.
         transformer: Configured NOMAD transformer containing migration rules.
+        base_sections_v1_list: Names of v1 BaseSection classes with rule mappings.
 
     Returns:
-        The transformed section, or the original section when no applicable
-        base-section transformation exists. The original section remains unchanged.
+        A transformed copy of ``source_section``, or ``source_section`` itself when
+        its MRO cannot be resolved. The input mapping is not modified.
     """
     print(f'### transforming section {section_definition}')
     section_mro = find_mro(section_definition=section_definition)
@@ -270,7 +335,7 @@ def transform_section(
     result_section = deepcopy(source_section)
 
     for inherited_class in reversed(section_mro):
-        if inherited_class.__name__ in BASE_SECTIONS_V1_LIST:
+        if inherited_class.__name__ in base_sections_v1_list:
             print(
                 f'###### applying {inherited_class.__name__}'
                 + f' transformation to section {section_definition}'
@@ -290,10 +355,10 @@ def transform_section(
 
 if __name__ == '__main__':
     path_prefix = pathlib.Path(__file__).parents[3]
-    transformer = create_transformer(path_prefix)
+    transformer, base_sections_v1_list = create_transformer(path_prefix)
 
     for v1_suffix, v2_suffix in zip(SUFFIX_V1, SUFFIX_V2):
-        for path in (path_prefix / TEMP_FOLDER).rglob(f'*ELNSubstance{v1_suffix}'):
+        for path in (path_prefix / TEMP_FOLDER).rglob(f'*{v1_suffix}'):
             print(f'Transforming {path}')
             text = path.read_text()
             source_data_full = (
@@ -334,7 +399,10 @@ if __name__ == '__main__':
 
                 if section_definition is not None and isinstance(old_section, dict):
                     new_section = transform_section(
-                        old_section, section_definition, transformer
+                        old_section,
+                        section_definition,
+                        transformer,
+                        base_sections_v1_list
                     )
                     if isinstance(parent_section, dict):
                         parent_section.update({previous_key: new_section})

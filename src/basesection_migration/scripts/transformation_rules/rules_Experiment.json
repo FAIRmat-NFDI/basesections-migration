@@ -1,3 +1,16 @@
 {
-    "rules": {}
+    "rules": {
+        "rename_steps_in_experiment": {
+            "source": "steps",
+            "target": "sub_activities"
+        },
+        "rename_lab_id_in_steps": {
+            "source": "steps[n1].lab_id",
+            "target": "sub_activities[n1].reference_lab_id"
+        },
+        "remove_old_lab_id_in_steps": {
+            "target": "sub_activities[n1].lab_id",
+            "action": "delete"
+        }
+    }
 }
