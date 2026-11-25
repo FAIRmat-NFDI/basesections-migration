@@ -1,3 +1,20 @@
 {
-    "rules": {}
+    "rules": {
+        "move_m_def_conditionally": {
+            "source": "entities[n1].m_def",
+            "target": "entities[n1].e9cacee39625cf34b49fda3a3ffc71d9e1d2b71c3dec174cd6d41054898f2821",
+            "conditions": [
+                {
+                    "regex_condition": {
+                        "regex_path": "entities[n1].m_def",
+                        "regex_pattern": "^nomad\\.datamodel\\.metainfo\\.basesections\\.v1\\.CompositeSystemReference$"
+                    }
+                }
+            ]
+        },
+        "delete_temp_storage_m_def": {
+            "target": "entities[n1].e9cacee39625cf34b49fda3a3ffc71d9e1d2b71c3dec174cd6d41054898f2821",
+            "action": "delete"
+        }
+    }
 }

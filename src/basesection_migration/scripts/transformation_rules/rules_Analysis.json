@@ -1,3 +1,8 @@
 {
-    "rules": {}
+    "rules": {
+        "rename_comment_to_description": {
+            "source": "steps[n1].comment",
+            "target": "steps[n1].description"
+        }
+    }
 }
